@@ -44,6 +44,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.14",
     "@types/qrcode": "^1.5.6",
