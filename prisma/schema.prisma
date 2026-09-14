@@ -1,0 +1,631 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ====================================================
+// GESTION MULTI-TENANT & RÔLES UTILISATEURS (RBAC)
+// ====================================================
+
+enum UserRole {
+  SUPER_ADMIN     // Administrateur plateforme SaaS
+  AGENCY_ADMIN    // Directeur / Manager d'agence de voyage
+  AGENCY_STAFF    // Agent de réservation / commercial
+  TOUR_LEADER     // Accompagnateur de voyage / Guide
+  CLIENT          // Voyageur
+}
+
+model Agency {
+  id              String               @id @default(cuid())
+  name            String
+  slug            String               @unique
+  licenseNumber   String?              // N° d'agrément Ministère du Tourisme
+  logoUrl         String?
+  phone           String
+  email           String
+  address         String?
+  city            String               @default("Casablanca")
+  iceNumber       String?              // Identifiant Commun de l'Entreprise (ICE)
+  rcNumber        String?              // Registre de Commerce
+  bankAccounts    Json?                // Coordonnées bancaires RIB (CIH, Attijari, BOA, etc.)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  users           User[]
+  trips           Trip[]
+}
+
+model User {
+  id                String             @id @default(cuid())
+  agencyId          String?
+  agency            Agency?            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  name              String?
+  email             String             @unique
+  emailVerified     DateTime?
+  image             String?
+  avatarUrl         String?
+  passwordHash      String?            // Optionnel pour les comptes Google OAuth
+  fullName          String?
+  phone             String?            @unique // Ex: +212661000000
+  cinOrPassport     String?            // N° CIN ou Passeport
+  city              String?            @default("Casablanca")
+  role              UserRole           @default(CLIENT)
+  isVerified        Boolean            @default(false)
+  isProfileComplete Boolean            @default(false)
+  isBlocked         Boolean            @default(false) // Permet de suspendre l'accès
+  blockedReason     String?            // Motif de suspension du compte
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  bookings          Booking[]          @relation("ClientBookings")
+  notifications     Notification[]
+  resetTokens       PasswordResetToken[]
+  teamMember        TeamMember?
+
+  @@index([agencyId])
+  @@index([phone])
+}
+
+// Modèles NextAuth / Auth.js
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum NotificationType {
+  DEPARTURE_GUARANTEED
+  PAYMENT_CONFIRMED
+  NEW_TRIP_AVAILABLE
+  TRIP_REMINDER
+  ADMIN_ALERT
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        NotificationType @default(DEPARTURE_GUARANTEED)
+  isRead      Boolean          @default(false)
+  linkUrl     String?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model PasswordResetToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String?
+  token       String   @unique
+  expiresAt   DateTime
+  isUsed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([token])
+}
+
+// ====================================================
+// CIRCUITS & PROGRAMMES
+// ====================================================
+
+enum TripType {
+  WEEKEND_BREAK      // Escapade Weekend (2J/1N)
+  MULTI_DAY_TOUR     // Grand Tour Découverte (3J à 7J+)
+  DAY_TRIP           // Excursion d'une journée
+  TREKKING_HIKING    // Randonnée / Aventure Atlas & Désert
+  SAHARA_SPECIAL     // Bivouac Merzouga / Zagora
+}
+
+enum TripPublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Trip {
+  id                  String             @id @default(cuid())
+  agencyId            String?
+  agency              Agency?            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  titleFr             String
+  titleAr             String
+  titleEn             String?
+  slug                String             @unique
+  tripType            TripType           @default(MULTI_DAY_TOUR)
+  publishStatus       TripPublishStatus  @default(PUBLISHED)
+  durationDays        Int                @default(3)
+  durationNights      Int                @default(2)
+  destinationRegion   String             // Ex: "Drâa-Tafilalet (Merzouga)", "Nord (Chefchaouen, Akchour)"
+  departureCity       String             // Ex: "Casablanca, Rabat"
+  basePrice           Decimal            @default(1450.00) @db.Decimal(10, 2)
+  depositPerPerson    Decimal            @default(500.00) @db.Decimal(10, 2)
+  singleSupplement    Decimal            @default(350.00) @db.Decimal(10, 2)
+  totalSeats          Int                @default(48)
+  minSeatsRequired    Int                @default(15) // Seuil minimum garanti
+  shortDescriptionFr  String
+  shortDescriptionAr  String
+  longDescriptionFr   String             @db.Text
+  longDescriptionAr   String             @db.Text
+  includedServicesFr  String[]           @default([])
+  includedServicesAr  String[]           @default([])
+  excludedServicesFr  String[]           @default([])
+  excludedServicesAr  String[]           @default([])
+  checklistItemsFr    String[]           @default([])
+  checklistItemsAr    String[]           @default([])
+  includedServices    String[]           @default([])
+  excludedServices    String[]           @default([])
+  whatToBring         String[]           @default([])
+  coverImageUrl       String
+  galleryImages       String[]
+  isFeatured          Boolean            @default(false)
+  isScheduledThisWeek Boolean            @default(false) // Indique si c'est le circuit au départ ce week-end
+  featuredWeekMessage String?                               // Message personnalisé optionnel (ex: "Il ne reste que 6 places pour ce week-end !")
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  departureDates      DepartureDate[]
+  pickupPoints        TripPickupPoint[]
+  itineraryDays       ItineraryDay[]
+  addons              TripAddon[]
+  staffAssignments    TripStaff[]
+  partnerAssignments  TripPartner[]
+  bookings            Booking[]
+  fixedCosts          TripFixedCost[]
+  variableCosts       TripVariableCostPerPerson[]
+
+  @@index([agencyId])
+  @@index([slug])
+  @@index([isScheduledThisWeek])
+}
+
+model ItineraryDay {
+  id            String   @id @default(cuid())
+  tripId        String
+  trip          Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  dayNumber     Int      @default(1)
+  titleFr       String
+  titleAr       String
+  timeSlot      String?  // ex: "18h30 - 23h30" ou "09h00 - 13h00"
+  locationName  String?
+  location      String
+  featuredImage String
+  meals         String[]
+  descriptionFr String   @db.Text
+  descriptionAr String   @db.Text
+  activityTags  String[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tripId])
+  @@index([tripId, dayNumber])
+}
+
+model TripPickupPoint {
+  id              String             @id @default(cuid())
+  tripId          String
+  trip            Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  cityName        String             // "Casablanca", "Rabat", "Kénitra"
+  city            String?            // Alias flexible
+  locationNameFr  String             // "Gare Casa-Voyageurs (Devant l'Ibis)"
+  locationNameAr  String?            // "محطة الدار البيضاء المسافرين"
+  locationName    String?            // Alias flexible
+  googleMapsUrl   String?
+  departureTime   String             // "06:00" ou "18:30"
+  meetingTime     String?            // Alias flexible
+  orderIndex      Int                @default(0)
+  createdAt       DateTime           @default(now())
+
+  @@index([tripId])
+}
+
+enum DepartureStatus {
+  DRAFT
+  OPEN_FOR_BOOKING
+  GUARANTEED         // Départ garanti (seuil min atteint)
+  ALMOST_FULL        // Moins de 5 places restantes
+  SOLD_OUT           // Complet
+  IN_PROGRESS        // Voyage en cours de route
+  COMPLETED          // Voyage terminé
+  CANCELLED          // Annulé
+}
+
+model DepartureDate {
+  id                     String           @id @default(cuid())
+  tripId                 String
+  trip                   Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  startDate              DateTime         @db.Date
+  endDate                DateTime         @db.Date
+  totalCapacity          Int              @default(48)
+  minSeatsForGuaranteed  Int              @default(15)
+  basePriceDouble        Decimal          @db.Decimal(10, 2)
+  priceTriple            Decimal?         @db.Decimal(10, 2)
+  singleRoomSupplement   Decimal          @default(0) @db.Decimal(10, 2)
+  depositAmount          Decimal          @default(500.00) @db.Decimal(10, 2)
+  occupiedSeats          Int              @default(0)
+  status                 DepartureStatus  @default(OPEN_FOR_BOOKING)
+  
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  bookings               Booking[]
+
+  @@index([tripId])
+  @@index([startDate])
+}
+
+model TripAddon {
+  id              String           @id @default(cuid())
+  tripId          String
+  trip            Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  nameFr          String           // "Session Quad 1h au coucher de soleil"
+  nameAr          String           // "جولة كواد في الرمال لمدة ساعة"
+  price           Decimal          @db.Decimal(10, 2) // Prix en MAD
+  descriptionFr   String?
+  descriptionAr   String?
+  isPerPerson     Boolean          @default(true)
+  isActive        Boolean          @default(true)
+
+  @@index([tripId])
+}
+
+// ====================================================
+// 1. GESTION DE L'ÉQUIPE, RÔLES & PERMISSIONS
+// ====================================================
+
+enum TeamRole {
+  SUPER_ADMIN     // Accès total (Finances, Paramètres, Suppression, Tous circuits)
+  ORGANIZER       // Gestion des circuits, réservations et prestataires
+  TOUR_LEADER     // Chef de voyage / Coordinateur de groupe (Scan + Manifeste)
+  OFFICIAL_GUIDE  // Guide de tourisme agréé (Scan + Feuille de route TIST)
+  DRIVER          // Chauffeur transport touristique (Pointage ramassage)
+}
+
+model TeamMember {
+  id              String       @id @default(cuid())
+  userId          String?      @unique // Lié à un compte User s'il a un login email
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName        String
+  phone           String       // WhatsApp
+  email           String?      @unique
+  role            TeamRole     @default(TOUR_LEADER)
+  cinNumber       String?      // Requis pour feuille de route TIST
+  guideCardNumber String?      // N° carte professionnelle guide si applicable
+  notes           String?
+  
+  // Permissions directes
+  canScanTickets  Boolean      @default(true)  // Droit d'utiliser la caméra pour pointer
+  canViewManifest Boolean      @default(true)  // Droit de consulter la liste des passagers
+  canCollectCash  Boolean      @default(false) // Droit d'encaisser le solde restant au départ
+  canEditTrips    Boolean      @default(false) // Droit de modifier le programme
+  
+  isActive        Boolean      @default(true)  // Activation / Suspension immédiate
+  assignedTrips   TripStaff[]  // Circuits assignés
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([role])
+  @@index([phone])
+}
+
+// Table de liaison membre <-> circuit
+model TripStaff {
+  id               String      @id @default(cuid())
+  tripId           String
+  teamMemberId     String
+  trip             Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  teamMember       TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  assignedRole     TeamRole    @default(TOUR_LEADER)
+  assignedMissions String[]    @default([])
+  remuneration     Decimal?    @db.Decimal(10, 2)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([tripId, teamMemberId])
+  @@index([tripId])
+  @@index([teamMemberId])
+}
+
+// ====================================================
+// 2. PARTENAIRES (HÔTELS & TRANSPORTEURS) (CHANTIER 1)
+// ====================================================
+
+enum PartnerType {
+  HOTEL_AUBERGE
+  HOTEL_BIVOUAC
+  TRANSPORT_TOURISTIQUE
+  TRANSPORTER_TIST
+  LEISURE_ACTIVITY
+  ACTIVITE_LOISIR
+}
+
+enum PartnerStatus {
+  EN_ATTENTE
+  ACCEPTE
+  REFUSE
+  ANNULE
+}
+
+model Partner {
+  id           String        @id @default(cuid())
+  type         PartnerType
+  companyName  String
+  contactName  String
+  phone        String
+  city         String
+  rateDetails  String?       // Tarifs négociés et conditions
+  capacity     Int?          // Capacité hôtel, nombre de places autocar/minibus ou participants max
+  vehicleType  String?       // "Autocar 48 places", "Minibus 17 places"
+  plateNumber  String?       // Immatriculation (ex: 45210|A|6)
+  activityType String?       // Type d'activité : "Quad & Buggy", "Jet Ski & Base Nautique", "Club de Plongée", "Barquiers", etc.
+  email        String?       // Email de contact officiel
+  notes        String?       // Notes, conventions et accords tarifaires
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tripPartners TripPartner[]
+}
+
+model TripPartner {
+  id             String        @id @default(cuid())
+  tripId         String
+  partnerId      String
+  status         PartnerStatus @default(EN_ATTENTE)
+  negotiatedCost Decimal?      @db.Decimal(10, 2)
+  driverAssigned String?       // Nom du chauffeur pour le transport
+  notes          String?
+  confirmedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([partnerId])
+}
+
+// ====================================================
+// 3. RÉSERVATIONS ET VOYAGEURS (CHANTIER 1)
+// ====================================================
+
+enum BookingStatus {
+  PENDING_PAYMENT        // En attente de paiement / virement
+  PENDING_VERIFICATION   // Reçu bancaire téléversé sur Cloudflare R2, en attente de vérification admin
+  DEPOSIT_CONFIRMED      // Acompte validé (place réservée, billet d'embarquement généré)
+  FULLY_PAID             // Solde restant intégralement payé
+  CANCELLED              // Annulée
+  EN_ATTENTE             // Compatibilité legacy
+  CONFIRMEE              // Compatibilité legacy
+  ANNULEE                // Compatibilité legacy
+}
+
+enum PaymentStatus {
+  NON_PAYE
+  ACOMPTE_VERSE
+  SOLDE_VERSE
+  PAYE_INTEGRALEMENT
+}
+
+enum TravelerCategory {
+  ADULTE
+  ENFANT
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  reference       String        @unique // Ex: RB-2026-000125
+  userId          String
+  tripId          String
+  departureDateId String?
+  status          BookingStatus @default(PENDING_PAYMENT)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  depositAmount   Decimal       @db.Decimal(10, 2)
+  amountPaid      Decimal       @default(0) @db.Decimal(10, 2)
+  paymentStatus   PaymentStatus @default(NON_PAYE)
+  qrCodeToken     String?       @unique @default(cuid())
+  notes           String?
+  cancelledAt     DateTime?
+  cancellationReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user          User           @relation("ClientBookings", fields: [userId], references: [id], onDelete: Cascade)
+  trip          Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  departureDate DepartureDate? @relation(fields: [departureDateId], references: [id], onDelete: SetNull)
+  travelers     Traveler[]
+  payments      Payment[]
+  invoice       Invoice?
+  quote         Quote?
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([departureDateId])
+  @@index([reference])
+}
+
+model Traveler {
+  id               String           @id @default(cuid())
+  bookingId        String
+  fullName         String           // Nom & Prénom conformes CIN/Passeport
+  cinPassport      String           // N° CIN ou Passeport
+  phone            String?
+  category         TravelerCategory @default(ADULTE)
+  emergencyContact String?
+  pickupCity       String?          @default("Casablanca")
+  roomType         String?          @default("DOUBLE_TWIN")
+  isCheckedIn      Boolean          @default(false)
+  checkedInAt      DateTime?
+  checkedInBy      String?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([cinPassport])
+}
+
+// ====================================================
+// 4. DEVIS, FACTURES ET PAIEMENTS (CHANTIER 1)
+// ====================================================
+
+enum QuoteStatus {
+  BROUILLON
+  ENVOYE
+  ACCEPTE
+  EXPIRE
+}
+
+model Quote {
+  id         String      @id @default(cuid())
+  number     String      @unique // Ex: DEV-2026-000123
+  bookingId  String      @unique
+  subtotalHT Decimal     @db.Decimal(10, 2)
+  taxAmount  Decimal     @db.Decimal(10, 2)
+  totalTTC   Decimal     @db.Decimal(10, 2)
+  validUntil DateTime
+  status     QuoteStatus @default(BROUILLON)
+  pdfUrl     String?     // URL Cloudflare R2
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+enum InvoiceStatus {
+  EMISE
+  PARTIELLEMENT_PAYEE
+  PAYEE
+  ANNULEE
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  number      String        @unique // Ex: FAC-2026-000456
+  bookingId   String        @unique
+  subtotalHT  Decimal       @db.Decimal(10, 2)
+  taxAmount   Decimal       @db.Decimal(10, 2)
+  totalTTC    Decimal       @db.Decimal(10, 2)
+  depositPaid Decimal       @default(0) @db.Decimal(10, 2)
+  balanceDue  Decimal       @default(0) @db.Decimal(10, 2)
+  status      InvoiceStatus @default(EMISE)
+  pdfUrl      String?       // URL Cloudflare R2
+  issuedAt    DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+enum PaymentType {
+  ACOMPTE
+  SOLDE
+  PAIEMENT_COMPLET
+  REMBOURSEMENT
+}
+
+enum PaymentMethod {
+  CIH_TRANSFER
+  ATTIJARI_TRANSFER
+  CASH_PLUS
+  CREDIT_CARD_CMI
+  CASH_ON_DEPARTURE
+  CARTE
+  VIREMENT
+  ESPECES
+  AGENCE
+}
+
+enum PaymentValidationStatus {
+  EN_ATTENTE
+  VALIDE
+  ECHOUE
+  REMBOURSE
+}
+
+model Payment {
+  id        String                  @id @default(cuid())
+  bookingId String
+  amount    Decimal                 @db.Decimal(10, 2)
+  type      PaymentType
+  method    PaymentMethod
+  status    PaymentValidationStatus @default(EN_ATTENTE)
+  proofUrl  String?                 // Preuve virement bancaire sur Cloudflare R2
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+// ====================================================
+// 5. MOTEUR DE RENTABILITÉ & COÛTS (CHANTIER 1)
+// ====================================================
+
+model TripFixedCost {
+  id     String  @id @default(cuid())
+  tripId String
+  label  String  // Ex: "Transport", "Staff & Rémunérations", "Frais logistiques"
+  amount Decimal @db.Decimal(10, 2)
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+model TripVariableCostPerPerson {
+  id     String  @id @default(cuid())
+  tripId String
+  label  String  // Ex: "Hôtel & Nuitées", "Restauration", "Billetterie & Activités"
+  amount Decimal @db.Decimal(10, 2)
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+

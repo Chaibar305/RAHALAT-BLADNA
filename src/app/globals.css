@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tp-cyan: #1BBACA;
+  --tp-cyan-hover: #087C89;
+  --tp-cyan-soft: #9DE2E8;
+  --tp-cyan-tint: #DDF6F8;
+  --tp-midnight: #0B2239;
+  --tp-midnight-light: #16344F;
+  --tp-midnight-dark: #061524;
+  --tp-ivory: #F6F3EE;
+  --tp-cream: #F1ECE3;
+  --tp-terracotta: #D9784B;
+  --tp-slate: #3A4A57;
+  --tp-muted: #5C6B79;
+  --tp-faint: #8A96A1;
+  --tp-line: #E7E0D4;
+  --tp-line-2: #E4DED3;
+  --tp-surface: #FFFFFF;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--tp-ivory);
+    color: var(--tp-midnight);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] input,
+[dir="rtl"] select,
+[dir="rtl"] textarea {
+  text-align: right;
+}
+
+/* Triplan V5 Custom Utilities & Micro-Interactions */
+.tp-lift {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.tp-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(11, 34, 57, 0.11);
+  border-color: var(--tp-cyan-soft);
+}
+
+.tp-lift-dark:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  border-color: rgba(157, 226, 232, 0.4);
+}
+
+/* Custom Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tp-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.tp-scrollbar::-webkit-scrollbar-track {
+  background: var(--tp-cream);
+  border-radius: 9999px;
+}
+.tp-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.tp-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--tp-cyan);
+}
+
+/* Glow effects */
+.tp-glow-cyan {
+  box-shadow: 0 0 25px rgba(27, 186, 202, 0.35);
+}
+
+/* Pattern background */
+.bg-moroccan-pattern {
+  background-image: radial-gradient(rgba(11, 34, 57, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-moroccan-pattern-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Utilitaires iOS Safe Area & Mobile First */
+.pb-safe {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+}
+.h-dvh {
+  height: 100dvh;
+}
+.max-h-dvh {
+  max-height: 90dvh;
+}
+
