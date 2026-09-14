@@ -11,6 +11,7 @@ export const ALLOWED_ADMIN_ROLES = [
 ];
 
 export const authConfig = {
+  trustHost: true,
   pages: {
     signIn: "/fr/connexion",
     newUser: "/fr/completer-profil",

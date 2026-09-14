@@ -335,6 +335,7 @@ export function AuthModal({
               <div className="space-y-4">
                 <GoogleAuthButton
                   variant="dark"
+                  callbackUrl="/fr"
                   onSuccess={() => {
                     onClose();
                     router.refresh();
@@ -434,6 +435,7 @@ export function AuthModal({
               <div className="space-y-4">
                 <GoogleAuthButton
                   variant="dark"
+                  callbackUrl="/fr"
                   onSuccess={() => {
                     onClose();
                     router.refresh();

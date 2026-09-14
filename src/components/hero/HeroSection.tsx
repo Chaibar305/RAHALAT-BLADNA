@@ -41,13 +41,12 @@ export function HeroSection() {
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/15 text-cyan-300 text-xs font-black uppercase tracking-widest shadow-xl"
         >
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400" />
-          <span>
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 font-extrabold text-xs tracking-wider uppercase">
+            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
             {isAr
-              ? "وكالة الأسفار والرحلات المنظمة بالمغرب"
-              : "AGENCE DE VOYAGES & CIRCUITS AU MAROC"}
+              ? "رحلات وأسفار بالمغرب"
+              : "VOYAGES & CIRCUITS AU MAROC"}
           </span>
         </motion.div>
 

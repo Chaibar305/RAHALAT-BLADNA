@@ -24,7 +24,7 @@ export function GoogleAuthButton({
   const isAr = locale === "ar";
   const [isLoading, setIsLoading] = useState(false);
 
-  const defaultCallback = callbackUrl || `/${locale}`;
+  const defaultCallback = callbackUrl || "/fr";
 
   const defaultText = isAr
     ? "المتابعة باستخدام جوجل"
@@ -36,7 +36,7 @@ export function GoogleAuthButton({
     try {
       setIsLoading(true);
       if (onSuccess) onSuccess();
-      // Trigger Google OAuth via NextAuth
+      // Déclenchement propre de Google OAuth sans URL absolue codée en dur
       await signIn("google", { callbackUrl: defaultCallback });
     } catch (error) {
       console.error("Google sign in error:", error);

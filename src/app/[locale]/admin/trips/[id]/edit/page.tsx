@@ -51,6 +51,13 @@ export default async function EditTripPage({
     shortDescriptionAr: trip.shortDescriptionAr,
     longDescriptionFr: trip.longDescriptionFr,
     longDescriptionAr: trip.longDescriptionAr,
+    overviewFr: (trip as any).overviewFr?.trim()
+      ? (trip as any).overviewFr
+      : (trip.longDescriptionFr || trip.shortDescriptionFr || ""),
+    overviewAr: (trip as any).overviewAr?.trim()
+      ? (trip as any).overviewAr
+      : (trip.longDescriptionAr || trip.shortDescriptionAr || ""),
+    showOverview: (trip as any).showOverview ?? true,
     isGuaranteed: trip.isFeatured,
     isBestSeller: trip.isFeatured,
     isScheduledThisWeek: (trip as any).isScheduledThisWeek ?? false,

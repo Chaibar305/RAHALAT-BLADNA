@@ -877,10 +877,24 @@ export default async function TripDetailPage({
               { id: "a2", name: isAr ? "جولة 4x4 في الكثبان وقرية خملية" : "Excursion 4x4 Tour des Dunes & Village Khamlia", price: 200, description: isAr ? "زيارة الرحل وموسيقى كناوة" : "Visite des nomades et découverte Gnawa", isPerPerson: true },
             ]
         ),
-    overview: isAr
-      ? (dbTrip?.longDescriptionAr || dbTrip?.shortDescriptionAr || "")
-      : (dbTrip?.longDescriptionFr || dbTrip?.shortDescriptionFr || ""),
+    showOverview: (dbTrip as any)?.showOverview !== false,
+    overviewFr: (dbTrip as any)?.overviewFr || "",
+    overviewAr: (dbTrip as any)?.overviewAr || "",
   };
+
+  // Récupère le texte de l'aperçu selon la langue (priorité au champ overview, repli sur descriptions existantes)
+  const rawOverview = locale === "ar"
+    ? ((dbTrip as any)?.overviewAr?.trim() || (dbTrip as any)?.overviewFr?.trim())
+    : ((dbTrip as any)?.overviewFr?.trim() || (dbTrip as any)?.overviewAr?.trim());
+
+  const fallbackOverview = locale === "ar"
+    ? (dbTrip?.longDescriptionAr || dbTrip?.shortDescriptionAr || "")
+    : (dbTrip?.longDescriptionFr || dbTrip?.shortDescriptionFr || "");
+
+  const overviewText = rawOverview || fallbackOverview;
+
+  // Condition stricte : N'afficher la carte QUE si la section est active ET qu'un texte existe
+  const shouldShowOverview = (dbTrip as any)?.showOverview !== false && Boolean(overviewText?.trim());
 
   return (
     <div className="bg-tp-ivory min-h-screen pb-28 lg:pb-16">
@@ -960,7 +974,7 @@ export default async function TripDetailPage({
           {/* LEFT: Rich Interactive Presentation */}
           <div className="lg:col-span-8 space-y-8">
             {/* Aperçu du Voyage & Storytelling */}
-            {trip.overview && (
+            {shouldShowOverview && overviewText && (
               <div className="bg-white rounded-3xl p-6 sm:p-8 border border-tp-line shadow-tp-sm space-y-4">
                 <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-tp-cyan-hover">
                   <Compass className="w-4 h-4" />
@@ -972,7 +986,7 @@ export default async function TripDetailPage({
                     : (dbTrip?.titleFr || "L’Odyssée du Sud : Une Élégance Aérienne")}
                 </h2>
                 <div className="space-y-4 text-xs sm:text-sm text-tp-slate leading-relaxed">
-                  {trip.overview.split("\n\n").map((paragraph: string, idx: number) => (
+                  {overviewText.split("\n\n").map((paragraph: string, idx: number) => (
                     <p
                       key={idx}
                       className={

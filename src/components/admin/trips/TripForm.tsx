@@ -9,7 +9,7 @@ import {
   Sparkles, Image as ImageIcon, MapPin, Calendar, 
   DollarSign, CheckCircle2, AlertCircle, Eye, BedDouble, 
   Bus, Tag, UtensilsCrossed, ShieldCheck, Clock, Layers, Navigation,
-  Check, X, Luggage, Flame
+  Check, X, Luggage, Flame, Compass
 } from "lucide-react";
 import { TripFormData, ItineraryDayData, DepartureDateAdminData, PickupPointAdminData } from "@/lib/validations/trip.schema";
 import { createTripAction, updateTripAction } from "@/actions/trip.actions";
@@ -49,8 +49,15 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
     coverImageUrl: initialData?.coverImageUrl || "/images/merzouga/cover-merzouga.jpg",
     shortDescriptionFr: initialData?.shortDescriptionFr || "Immersion féerique dans les plus hautes dunes du Sahara marocain.",
     shortDescriptionAr: initialData?.shortDescriptionAr || "",
-    longDescriptionFr: initialData?.longDescriptionFr || "",
-    longDescriptionAr: initialData?.longDescriptionAr || "",
+    longDescriptionFr: initialData?.longDescriptionFr || initialData?.overviewFr || "",
+    longDescriptionAr: initialData?.longDescriptionAr || initialData?.overviewAr || "",
+    overviewFr: initialData?.overviewFr?.trim() 
+      ? initialData.overviewFr 
+      : (initialData?.longDescriptionFr || initialData?.shortDescriptionFr || ""),
+    overviewAr: initialData?.overviewAr?.trim() 
+      ? initialData.overviewAr 
+      : (initialData?.longDescriptionAr || initialData?.shortDescriptionAr || ""),
+    showOverview: initialData?.showOverview ?? true,
     isGuaranteed: initialData?.isGuaranteed ?? true,
     isBestSeller: initialData?.isBestSeller ?? true,
     isScheduledThisWeek: initialData?.isScheduledThisWeek ?? false,
@@ -771,6 +778,116 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                   onChange={(e) => setFormData({ ...formData, durationNights: parseInt(e.target.value) || 0 })}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Aperçu du Voyage & Philosophie (Storytelling & Vision) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Aperçu du Voyage & Philosophie</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Présentez l&apos;esprit du voyage, l&apos;atmosphère des lieux et le récit d&apos;immersion mis en avant sur la fiche publique.
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Switch: showOverview */}
+              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
+                <div className="text-right">
+                  <span className="text-xs font-bold block text-slate-800 dark:text-slate-200">
+                    {formData.showOverview ? "Section Active" : "Section Masquée"}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                    Visibilité fiche publique
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.showOverview ?? true}
+                    onChange={(e) => setFormData({ ...formData, showOverview: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Warning / Hint when disabled */}
+            {!(formData.showOverview ?? true) && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>La section « Aperçu du Voyage & Philosophie » sera masquée sur la fiche publique pour ce circuit.</span>
+              </div>
+            )}
+
+            {/* Bilingue Textareas */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* French Overview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold">
+                    Aperçu & Philosophie (Français)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {(formData.overviewFr || "").length} car.
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  value={formData.overviewFr || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({
+                      ...formData,
+                      overviewFr: val,
+                      longDescriptionFr: val,
+                    });
+                  }}
+                  placeholder="Ex: Partez pour une immersion dépaysante entre sommets majestueux, eaux turquoise et bivouac de charme. Ce séjour combine le dépassement de soi et la détente absolue au cœur de paysages à couper le souffle..."
+                  className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm leading-relaxed transition-all resize-y"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Conseil : Séparez vos paragraphes par une ligne vide pour une mise en page aérée avec citation en exergue sur la fiche publique.
+                </p>
+              </div>
+
+              {/* Arabic Overview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold">
+                    نظرة عامة على التجربة وفلسفة السفر (العربية)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {(formData.overviewAr || "").length} حرف
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  dir="rtl"
+                  value={formData.overviewAr || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({
+                      ...formData,
+                      overviewAr: val,
+                      longDescriptionAr: val,
+                    });
+                  }}
+                  placeholder="مثال: انطلقوا في رحلة استثنائية تجمع بين روعة القمم الشاهقة والمياه الفيروزية للساحل المتوسطي، لتجديد الطاقة واكتشاف سحر المغرب الأصيل..."
+                  className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm leading-relaxed transition-all resize-y"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 text-right">
+                  نصيحة: افصل الفقرات بسطر فارغ لتنسيق النص بشكل جميل وجذاب للقارئ.
+                </p>
               </div>
             </div>
           </div>

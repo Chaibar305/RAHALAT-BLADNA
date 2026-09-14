@@ -5,7 +5,14 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+// Activer le mode trusted-host pour Netlify, Vercel et environnements de déploiement
+if (!process.env.AUTH_TRUST_HOST) {
+  process.env.AUTH_TRUST_HOST = "true";
+}
+
 export const authOptions: NextAuthOptions = {
+  // @ts-ignore - Support trustHost pour éviter les redirections vers localhost en production
+  trustHost: true,
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
@@ -93,6 +100,30 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // 1. Redirection relative (ex: '/fr', '/ar', '/admin') -> Conserver l'URL relative
+      // Cela garantit que le navigateur reste sur le domaine actuel (pas de bascule vers localhost)
+      if (url.startsWith("/")) {
+        return url;
+      }
+      // 2. Si l'URL demandée appartient à la même origine que baseUrl, autoriser
+      try {
+        const parsedUrl = new URL(url);
+        const parsedBase = new URL(baseUrl);
+        if (parsedUrl.origin === parsedBase.origin) {
+          return url;
+        }
+      } catch {
+        // En cas d'URL invalide, repli sur /fr
+        return "/fr";
+      }
+      // 3. Sécurité : Si l'URL pointe vers localhost alors qu'on est en production, rediriger vers /fr
+      if (url.includes("localhost")) {
+        return "/fr";
+      }
+      return url || "/fr";
+    },
+
     async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
         if (!user.email) return false;

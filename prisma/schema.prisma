@@ -193,6 +193,9 @@ model Trip {
   shortDescriptionAr  String
   longDescriptionFr   String             @db.Text
   longDescriptionAr   String             @db.Text
+  overviewFr          String?            @db.Text // Aperçu & Philosophie en Français
+  overviewAr          String?            @db.Text // Aperçu & Philosophie en Arabe
+  showOverview        Boolean            @default(true) // Toggle visibilité sur la fiche publique
   includedServicesFr  String[]           @default([])
   includedServicesAr  String[]           @default([])
   excludedServicesFr  String[]           @default([])

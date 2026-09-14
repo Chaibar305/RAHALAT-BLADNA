@@ -196,6 +196,9 @@ export async function requestPasswordResetAction(
     const baseUrl =
       process.env.NEXTAUTH_URL ||
       process.env.AUTH_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.URL ? process.env.URL : "") ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
       "http://localhost:3000";
 
     const cleanBaseUrl = baseUrl.replace(/\/$/, "");

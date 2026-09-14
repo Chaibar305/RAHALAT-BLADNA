@@ -121,8 +121,11 @@ export async function createTripAction(data: TripFormData) {
           singleSupplement: validData.singleSupplement || 350,
           shortDescriptionFr: validData.shortDescriptionFr,
           shortDescriptionAr: validData.shortDescriptionAr,
-          longDescriptionFr: validData.longDescriptionFr,
-          longDescriptionAr: validData.longDescriptionAr,
+          longDescriptionFr: validData.longDescriptionFr || validData.overviewFr || "",
+          longDescriptionAr: validData.longDescriptionAr || validData.overviewAr || "",
+          overviewFr: validData.overviewFr || null,
+          overviewAr: validData.overviewAr || null,
+          showOverview: validData.showOverview ?? true,
           coverImageUrl: validData.coverImageUrl || "/images/merzouga/cover-merzouga.jpg",
           isFeatured: validData.isBestSeller || validData.isGuaranteed,
           isScheduledThisWeek: validData.isScheduledThisWeek || false,
@@ -258,8 +261,11 @@ export async function updateTripAction(id: string, data: TripFormData) {
           singleSupplement: validData.singleSupplement,
           shortDescriptionFr: validData.shortDescriptionFr,
           shortDescriptionAr: validData.shortDescriptionAr,
-          longDescriptionFr: validData.longDescriptionFr,
-          longDescriptionAr: validData.longDescriptionAr,
+          longDescriptionFr: validData.longDescriptionFr || validData.overviewFr || "",
+          longDescriptionAr: validData.longDescriptionAr || validData.overviewAr || "",
+          overviewFr: validData.overviewFr || null,
+          overviewAr: validData.overviewAr || null,
+          showOverview: validData.showOverview ?? true,
           coverImageUrl: validData.coverImageUrl,
           isScheduledThisWeek: validData.isScheduledThisWeek || false,
           featuredWeekMessage: validData.featuredWeekMessage || null,
@@ -356,6 +362,11 @@ export async function updateTripAction(id: string, data: TripFormData) {
     revalidatePath(`/admin/trips/${updated.slug}`);
     revalidatePath("/trips");
     revalidatePath(`/trips/${updated.slug}`);
+    revalidatePath(`/[locale]/trips/${updated.slug}`, "page");
+    revalidatePath(`/fr/trips/${updated.slug}`);
+    revalidatePath(`/ar/trips/${updated.slug}`);
+    revalidatePath("/fr");
+    revalidatePath("/ar");
     revalidatePath("/");
 
     return { success: true, tripId: updated.id, slug: updated.slug };
