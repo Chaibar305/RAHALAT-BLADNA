@@ -11,7 +11,14 @@ import {
 } from "@/lib/excel/excelService";
 import { TravelerCategory, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { updateClientByAdmin as updateClientByAdminImpl } from "./admin-clients";
+import { 
+  updateClientByAdmin as updateClientByAdminImpl,
+  clearClientBookingsAction as clearClientBookingsImpl,
+  deleteClientAccountAction as deleteClientAccountImpl,
+} from "./admin-clients";
+
+export const clearClientBookingsAction = clearClientBookingsImpl;
+export const deleteClientAccountAction = deleteClientAccountImpl;
 
 /**
  * Met à jour les informations nominatives d'un passager (correction CIN, nom, etc.)

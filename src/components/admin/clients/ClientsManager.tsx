@@ -117,6 +117,31 @@ export function ClientsManager({
     }
   };
 
+  const handleClientBookingsCleared = (clientId: string) => {
+    setClientsList((prev) =>
+      prev.map((c) =>
+        c.id === clientId
+          ? {
+              ...c,
+              bookings: [],
+              invoices: [],
+            }
+          : c
+      )
+    );
+    if (selectedClient && selectedClient.id === clientId) {
+      setSelectedClient((prev) =>
+        prev
+          ? {
+              ...prev,
+              bookings: [],
+              invoices: [],
+            }
+          : null
+      );
+    }
+  };
+
   // Mise à jour locale après édition rapide d'un passager
   const handlePassengerUpdated = (updated: any) => {
     setPassengersList((prev) =>
@@ -250,6 +275,7 @@ export function ClientsManager({
         onClose={() => setDeletingClient(null)}
         client={deletingClient}
         onSuccess={handleClientDeleted}
+        onBookingsCleared={handleClientBookingsCleared}
         locale={locale}
       />
     </div>

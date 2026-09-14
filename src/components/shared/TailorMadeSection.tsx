@@ -94,11 +94,11 @@ export function TailorMadeSection() {
 
           {/* Right Column: Visual Photo Collage */}
           <div className="lg:col-span-5 relative">
-            <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-tp-midnight aspect-[4/5]">
+            <div className="relative rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white bg-tp-midnight aspect-[4/5]">
               <img
-                src="https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1000&q=80"
-                alt="Voyage sur mesure Maroc"
-                className="w-full h-full object-cover"
+                src="/images/home/mosquee-hassan-2-casablanca.jpg"
+                alt="Mosquée Hassan II, Casablanca - Rahalat Bladna"
+                className="object-cover object-center w-full h-full rounded-[2.5rem] shadow-xl"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-tp-midnight/90 via-tp-midnight/20 to-transparent" />
 

@@ -131,3 +131,195 @@ export async function updateClientByAdmin(
     return { success: false, error: error.message || "Erreur lors de l'enregistrement." };
   }
 }
+
+/**
+ * Server Action : Vider uniquement les réservations et paiements d'un client
+ * Conserve le compte utilisateur actif et réinitialise son historique commercial
+ */
+export async function clearClientBookingsAction(clientId: string) {
+  const session = await auth();
+  const userRole = ((session?.user as any)?.role || "").toUpperCase();
+
+  const isAuthorized =
+    userRole === "SUPERADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ADMIN" ||
+    userRole === "AGENCY_ADMIN";
+
+  if (!session?.user || !isAuthorized) {
+    return { success: false, error: "Action non autorisée." };
+  }
+
+  try {
+    if (!clientId) {
+      return { success: false, error: "Identifiant client manquant." };
+    }
+
+    const client = await prisma.user.findUnique({
+      where: { id: clientId },
+      select: { id: true, fullName: true, name: true, email: true },
+    });
+
+    if (!client) {
+      return { success: false, error: "Compte client introuvable." };
+    }
+
+    // 1. Récupérer les réservations du client pour ajuster les quotas de places
+    const bookings = await prisma.booking.findMany({
+      where: { userId: clientId },
+      include: {
+        departureDate: true,
+        travelers: { select: { id: true } },
+      },
+    });
+
+    if (bookings.length === 0) {
+      return {
+        success: true,
+        message: "Ce client n'a aucun dossier de réservation ni paiement à vider.",
+        clearedCount: 0,
+      };
+    }
+
+    // 2. Restaurer les places occupées pour les départs actifs
+    for (const booking of bookings) {
+      if (booking.status !== "CANCELLED" && booking.departureDateId && booking.departureDate) {
+        const paxCount = booking.travelers.length || 1;
+        await prisma.departureDate.update({
+          where: { id: booking.departureDateId },
+          data: {
+            occupiedSeats: {
+              decrement: Math.min(booking.departureDate.occupiedSeats, paxCount),
+            },
+          },
+        });
+      }
+    }
+
+    // 3. Supprimer les paiements, factures, devis, passagers/voyageurs et réservations
+    const bookingIds = bookings.map((b) => b.id);
+
+    await prisma.$transaction([
+      prisma.payment.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.invoice.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.quote.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.traveler.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.booking.deleteMany({ where: { userId: clientId } }),
+    ]);
+
+    revalidatePath("/admin/clients");
+    revalidatePath("/admin/bookings");
+    revalidatePath("/admin/reservations");
+    revalidatePath("/admin");
+    revalidatePath("/mon-compte/reservations");
+
+    return {
+      success: true,
+      message: `${bookings.length} dossier(s) de réservation et historiques de paiements supprimés avec succès pour ${client.fullName || client.name || client.email}. Le compte client a été conservé.`,
+      clearedCount: bookings.length,
+    };
+  } catch (error: any) {
+    console.error("[clearClientBookingsAction] Error:", error);
+    return { success: false, error: error.message || "Erreur lors de la suppression des réservations." };
+  }
+}
+
+/**
+ * Server Action : Supprimer définitivement un compte client et tout son historique
+ */
+export async function deleteClientAccountAction(clientId: string) {
+  const session = await auth();
+  const userRole = ((session?.user as any)?.role || "").toUpperCase();
+
+  const isAuthorized =
+    userRole === "SUPERADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ADMIN" ||
+    userRole === "AGENCY_ADMIN";
+
+  if (!session?.user || !isAuthorized) {
+    return { success: false, error: "Action strictement réservée à l'administration." };
+  }
+
+  const currentAdmin = session.user as any;
+
+  try {
+    if (!clientId) {
+      return { success: false, error: "Identifiant client manquant." };
+    }
+
+    // Protection : interdiction de supprimer son propre compte
+    if (clientId === currentAdmin.id) {
+      return { success: false, error: "Action interdite : vous ne pouvez pas supprimer votre propre compte." };
+    }
+
+    const client = await prisma.user.findUnique({
+      where: { id: clientId },
+      include: {
+        bookings: {
+          include: {
+            departureDate: true,
+            travelers: { select: { id: true } },
+          },
+        },
+      },
+    });
+
+    if (!client) {
+      return { success: false, error: "Compte client introuvable." };
+    }
+
+    // Protection Super Admin
+    if (client.role === "SUPER_ADMIN" && currentAdmin.role !== "SUPER_ADMIN") {
+      return { success: false, error: "Action interdite sur un compte Super-Administrateur." };
+    }
+
+    // 1. Restaurer les places occupées pour les départs correspondants
+    for (const booking of client.bookings) {
+      if (booking.status !== "CANCELLED" && booking.departureDateId && booking.departureDate) {
+        const paxCount = booking.travelers.length || 1;
+        await prisma.departureDate.update({
+          where: { id: booking.departureDateId },
+          data: {
+            occupiedSeats: {
+              decrement: Math.min(booking.departureDate.occupiedSeats, paxCount),
+            },
+          },
+        });
+      }
+    }
+
+    const bookingIds = client.bookings.map((b) => b.id);
+
+    // 2. Nettoyage complet et suppression du compte utilisateur
+    await prisma.$transaction([
+      prisma.payment.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.invoice.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.quote.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.traveler.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.booking.deleteMany({ where: { userId: clientId } }),
+      prisma.session.deleteMany({ where: { userId: clientId } }),
+      prisma.account.deleteMany({ where: { userId: clientId } }),
+      prisma.passwordResetToken.deleteMany({ where: { userId: clientId } }),
+      prisma.notification.deleteMany({ where: { userId: clientId } }),
+      prisma.user.delete({ where: { id: clientId } }),
+    ]);
+
+    revalidatePath("/admin/clients");
+    revalidatePath("/admin/bookings");
+    revalidatePath("/admin/reservations");
+    revalidatePath("/admin");
+
+    return {
+      success: true,
+      message: `Le compte client ${client.fullName || client.name || client.email} et son historique ont été définitivement supprimés.`,
+    };
+  } catch (error: any) {
+    console.error("[deleteClientAccountAction] Error:", error);
+    return { success: false, error: error.message || "Erreur lors de la suppression du compte." };
+  }
+}
+
+// Alias de compatibilité
+export const deleteClientAdminAction = deleteClientAccountAction;
+
