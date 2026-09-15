@@ -257,7 +257,7 @@ export async function importPassengersExcelAction(
                 amount: depositAmount,
                 type: PaymentType.ACOMPTE,
                 method: PaymentMethod.AGENCE,
-                status: "VALIDE",
+                status: PaymentStatus.VERIFIED,
               },
             ],
           },

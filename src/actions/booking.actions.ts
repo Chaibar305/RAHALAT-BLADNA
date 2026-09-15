@@ -6,6 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { CreateBookingSchema, CreateBookingInput } from "@/lib/validations/booking.schema";
 import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
+import { updateBookingAction } from "./admin-bookings";
+
+export { updateBookingAction };
 
 /**
  * Server Action : Création d'une réservation atomique avec Devis et Facture
@@ -100,25 +103,19 @@ export async function createBookingAction(input: CreateBookingInput) {
 
     // 4. Transaction Prisma Atomique ($transaction)
     const result = await prisma.$transaction(async (tx) => {
-      // Insertion de la réservation
+      // Insertion de la réservation : STRICTEMENT PENDING_VERIFICATION et 0 DH comptabilisés tant que non validé par l'admin
       const booking = await tx.booking.create({
         data: {
           reference: bookingRef,
           userId,
           tripId: trip.id,
           departureDateId: selectedDeparture?.id || null,
-          status: data.receiptUrl
-            ? BookingStatus.PENDING_VERIFICATION
-            : data.paymentOption === "FULL"
-            ? BookingStatus.FULLY_PAID
-            : BookingStatus.DEPOSIT_CONFIRMED,
+          status: BookingStatus.PENDING_VERIFICATION, // ⚠️ Toujours PENDING_VERIFICATION par défaut !
           totalAmount,
           depositAmount,
-          amountPaid,
-          paymentStatus:
-            data.paymentOption === "FULL"
-              ? PaymentStatus.PAYE_INTEGRALEMENT
-              : PaymentStatus.ACOMPTE_VERSE,
+          depositPaid: 0, // ⚠️ 0 tant que l'admin n'a pas validé !
+          amountPaid: 0,  // Rétro-compatibilité : 0
+          paymentStatus: PaymentStatus.PENDING,
           notes: data.notes || null,
           travelers: {
             create: data.travelers.map((t) => ({
@@ -135,7 +132,8 @@ export async function createBookingAction(input: CreateBookingInput) {
                 amount: amountPaid,
                 type: data.paymentOption === "FULL" ? PaymentType.PAIEMENT_COMPLET : PaymentType.ACOMPTE,
                 method: data.paymentMethod as PaymentMethod,
-                status: "VALIDE",
+                status: PaymentStatus.PENDING, // ⚠️ PENDING tant que non validé par l'admin !
+                receiptUrl: data.receiptUrl || null,
                 proofUrl: data.receiptUrl || null,
               },
             ],
@@ -157,9 +155,9 @@ export async function createBookingAction(input: CreateBookingInput) {
               subtotalHT: subtotalHt,
               taxAmount: taxAmount,
               totalTTC: totalAmount,
-              depositPaid: amountPaid,
-              balanceDue: balanceDue > 0 ? balanceDue : 0,
-              status: balanceDue === 0 ? InvoiceStatus.PAYEE : InvoiceStatus.PARTIELLEMENT_PAYEE,
+              depositPaid: 0, // ⚠️ Aucun acompte comptabilisé avant vérification
+              balanceDue: totalAmount,
+              status: InvoiceStatus.EMISE,
               pdfUrl: `/api/invoices/${invoiceNum}/download`,
             },
           },
@@ -241,7 +239,8 @@ export async function uploadBookingReceiptAction(formData: {
         amount: remaining > 0 ? remaining : booking.depositAmount,
         type: paid > 0 ? "SOLDE" : "ACOMPTE",
         method: "VIREMENT",
-        status: "EN_ATTENTE",
+        status: PaymentStatus.PENDING,
+        receiptUrl: formData.receiptUrl,
         proofUrl: formData.receiptUrl,
       },
     });
@@ -272,7 +271,8 @@ export async function validateBookingDepositAction(
   customAmount?: number,
   notes?: string
 ) {
-  await requireAdminSession("VALIDATE_BOOKING_DEPOSIT");
+  const adminSession = await requireAdminSession("VALIDATE_BOOKING_DEPOSIT");
+  const adminName = adminSession.user?.name || adminSession.user?.email || "Administrateur";
 
   try {
     const booking = await prisma.booking.findUnique({
@@ -288,8 +288,8 @@ export async function validateBookingDepositAction(
     const total = Number(booking.totalAmount);
     const isFull = depositToCredit >= total;
 
-    const newStatus = isFull ? BookingStatus.FULLY_PAID : BookingStatus.DEPOSIT_CONFIRMED;
-    const newPaymentStatus = isFull ? PaymentStatus.PAYE_INTEGRALEMENT : PaymentStatus.ACOMPTE_VERSE;
+    const newStatus = isFull ? BookingStatus.FULLY_PAID : BookingStatus.DEPOSIT_PAID;
+    const newPaymentStatus = PaymentStatus.VERIFIED;
 
     // Transaction pour tout valider de manière atomique
     await prisma.$transaction(async (tx) => {
@@ -299,21 +299,38 @@ export async function validateBookingDepositAction(
         data: {
           status: newStatus,
           paymentStatus: newPaymentStatus,
+          depositPaid: depositToCredit,
           amountPaid: depositToCredit,
           notes: notes
-            ? `${booking.notes ? booking.notes + "\n" : ""}[Validation Acompte Admin ${new Date().toLocaleDateString("fr-FR")}]: ${notes}`
+            ? `${booking.notes ? booking.notes + "\n" : ""}[Validation Acompte ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${notes}`
             : booking.notes,
         },
       });
 
-      // 2. Valider le dernier paiement en attente s'il existe
-      const pendingPayment = booking.payments.find((p) => p.status === "EN_ATTENTE");
+      // 2. Valider le paiement en attente ou le mettre à jour
+      const pendingPayment = booking.payments.find(
+        (p) => p.status === PaymentStatus.PENDING || (p.status as any) === "EN_ATTENTE"
+      );
       if (pendingPayment) {
         await tx.payment.update({
           where: { id: pendingPayment.id },
           data: {
-            status: "VALIDE",
+            status: PaymentStatus.VERIFIED,
             amount: depositToCredit,
+            verifiedAt: new Date(),
+            verifiedBy: adminName,
+          },
+        });
+      } else {
+        await tx.payment.create({
+          data: {
+            bookingId,
+            amount: depositToCredit,
+            status: PaymentStatus.VERIFIED,
+            type: isFull ? PaymentType.PAIEMENT_COMPLET : PaymentType.ACOMPTE,
+            method: PaymentMethod.VIREMENT,
+            verifiedAt: new Date(),
+            verifiedBy: adminName,
           },
         });
       }
@@ -351,7 +368,8 @@ export async function validateBookingDepositAction(
  * Admin Action : Valide le paiement intégral (Solde 100% réglé)
  */
 export async function validateBookingFullPaymentAction(bookingId: string, notes?: string) {
-  await requireAdminSession("VALIDATE_BOOKING_FULL_PAYMENT");
+  const adminSession = await requireAdminSession("VALIDATE_BOOKING_FULL_PAYMENT");
+  const adminName = adminSession.user?.name || adminSession.user?.email || "Administrateur";
 
   try {
     const booking = await prisma.booking.findUnique({
@@ -370,18 +388,26 @@ export async function validateBookingFullPaymentAction(bookingId: string, notes?
         where: { id: bookingId },
         data: {
           status: BookingStatus.FULLY_PAID,
-          paymentStatus: PaymentStatus.PAYE_INTEGRALEMENT,
+          paymentStatus: PaymentStatus.VERIFIED,
+          depositPaid: total,
           amountPaid: total,
           notes: notes
-            ? `${booking.notes ? booking.notes + "\n" : ""}[Validation Solde Total ${new Date().toLocaleDateString("fr-FR")}]: ${notes}`
+            ? `${booking.notes ? booking.notes + "\n" : ""}[Validation Solde Total ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${notes}`
             : booking.notes,
         },
       });
 
-      // Valider tous les paiements
+      // Valider tous les paiements en attente
       await tx.payment.updateMany({
-        where: { bookingId, status: "EN_ATTENTE" },
-        data: { status: "VALIDE" },
+        where: {
+          bookingId,
+          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+        },
+        data: {
+          status: PaymentStatus.VERIFIED,
+          verifiedAt: new Date(),
+          verifiedBy: adminName,
+        },
       });
 
       // Mettre à jour facture en soldée
@@ -413,7 +439,8 @@ export async function validateBookingFullPaymentAction(bookingId: string, notes?
  * Admin Action : Rejette un reçu bancaire non conforme
  */
 export async function rejectBookingReceiptAction(bookingId: string, reason: string) {
-  await requireAdminSession("REJECT_BOOKING_RECEIPT");
+  const adminSession = await requireAdminSession("REJECT_BOOKING_RECEIPT");
+  const adminName = adminSession.user?.name || adminSession.user?.email || "Administrateur";
 
   try {
     const booking = await prisma.booking.findUnique({
@@ -428,14 +455,22 @@ export async function rejectBookingReceiptAction(bookingId: string, reason: stri
       await tx.booking.update({
         where: { id: bookingId },
         data: {
-          status: BookingStatus.PENDING_PAYMENT,
-          notes: `${booking.notes ? booking.notes + "\n" : ""}[REJET REÇU ${new Date().toLocaleDateString("fr-FR")}]: ${reason}`,
+          status: BookingStatus.PENDING_VERIFICATION,
+          paymentStatus: PaymentStatus.REJECTED,
+          notes: `${booking.notes ? booking.notes + "\n" : ""}[REJET REÇU ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${reason}`,
         },
       });
 
       await tx.payment.updateMany({
-        where: { bookingId, status: "EN_ATTENTE" },
-        data: { status: "ECHOUE" },
+        where: {
+          bookingId,
+          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+        },
+        data: {
+          status: PaymentStatus.REJECTED,
+          verifiedAt: new Date(),
+          verifiedBy: adminName,
+        },
       });
     });
 
@@ -452,35 +487,84 @@ export async function rejectBookingReceiptAction(bookingId: string, reason: stri
 /**
  * Admin Action : Annule une réservation et libère les places
  */
+/**
+ * Admin Action : Annule une réservation par l'agence (Rejet/annulation administrative et libération des places)
+ */
 export async function cancelBookingAdminAction(bookingId: string, reason?: string) {
-  await requireAdminSession("CANCEL_BOOKING");
+  const adminSession = await requireAdminSession("CANCEL_BOOKING");
+  const adminName = adminSession.user?.name || adminSession.user?.email || "Administrateur";
 
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { invoice: true },
+      include: { invoice: true, travelers: true },
     });
 
     if (!booking) {
       return { success: false, error: "Dossier introuvable." };
     }
 
+    const formattedReason = reason || "Annulé par l'administration";
+    const passengerCount = booking.travelers.length || 1;
+
     await prisma.$transaction(async (tx) => {
+      // 1. Mettre à jour le booking avec statut strict CANCELLED_BY_ADMIN
       await tx.booking.update({
         where: { id: bookingId },
         data: {
-          status: BookingStatus.CANCELLED,
-          notes: reason
-            ? `${booking.notes ? booking.notes + "\n" : ""}[ANNULATION ${new Date().toLocaleDateString("fr-FR")}]: ${reason}`
-            : booking.notes,
+          status: BookingStatus.CANCELLED_BY_ADMIN,
+          cancelledAt: new Date(),
+          cancellationReason: formattedReason,
+          paymentStatus: PaymentStatus.REJECTED,
+          notes: `${booking.notes ? booking.notes + "\n" : ""}[ANNULATION ADMIN ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${formattedReason}`,
         },
       });
 
+      // 2. Rejeter les paiements non encaissés
+      await tx.payment.updateMany({
+        where: {
+          bookingId,
+          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+        },
+        data: {
+          status: PaymentStatus.REJECTED,
+          verifiedAt: new Date(),
+          verifiedBy: adminName,
+        },
+      });
+
+      // 3. Annuler la facture liée
       if (booking.invoice) {
         await tx.invoice.update({
           where: { id: booking.invoice.id },
           data: { status: InvoiceStatus.ANNULEE },
         });
+      }
+
+      // 4. Libérer les places sur la date de départ
+      if (booking.departureDateId) {
+        const dep = await tx.departureDate.findUnique({
+          where: { id: booking.departureDateId },
+        });
+
+        if (dep) {
+          const newOccupied = Math.max(0, (dep.occupiedSeats || 0) - passengerCount);
+          let newStatus = dep.status;
+          if (dep.status === "SOLD_OUT") {
+            newStatus =
+              newOccupied >= dep.minSeatsForGuaranteed
+                ? "GUARANTEED"
+                : "OPEN_FOR_BOOKING";
+          }
+
+          await tx.departureDate.update({
+            where: { id: booking.departureDateId },
+            data: {
+              occupiedSeats: newOccupied,
+              status: newStatus,
+            },
+          });
+        }
       }
     });
 
@@ -488,7 +572,7 @@ export async function cancelBookingAdminAction(bookingId: string, reason?: strin
     revalidatePath("/admin/clients");
     revalidatePath("/mon-compte/reservations");
 
-    return { success: true, message: "Réservation annulée avec succès." };
+    return { success: true, message: "Réservation annulée par l'agence et places libérées." };
   } catch (error: any) {
     console.error("cancelBookingAdminAction error:", error);
     return { success: false, error: error.message || "Erreur lors de l'annulation." };
@@ -528,10 +612,11 @@ export async function exportBookingsExcelAction(filterStatus?: string) {
         : "À définir";
 
       let statusLabel = "En Attente Paiement";
-      if (b.status === "PENDING_VERIFICATION") statusLabel = "À Vérifier (Reçu R2)";
-      else if (b.status === "DEPOSIT_CONFIRMED") statusLabel = "Acompte Validé";
+      if (b.status === "PENDING_VERIFICATION") statusLabel = "En attente vérification";
+      else if (b.status === "DEPOSIT_PAID" || b.status === "DEPOSIT_CONFIRMED") statusLabel = "Acompte Validé";
       else if (b.status === "FULLY_PAID") statusLabel = "Soldé 100%";
-      else if (b.status === "CANCELLED") statusLabel = "Annulée";
+      else if (b.status === "CANCELLED_BY_CLIENT") statusLabel = "Annulée (Client)";
+      else if (b.status === "CANCELLED_BY_ADMIN" || b.status === "CANCELLED") statusLabel = "Annulée (Agence)";
 
       return {
         id: b.id,
@@ -572,90 +657,17 @@ export async function exportBookingsExcelAction(filterStatus?: string) {
 export async function updateBookingAdminAction(
   bookingId: string,
   data: {
-    status: BookingStatus;
-    paymentStatus: PaymentStatus;
-    totalAmount: number;
-    depositAmount: number;
-    amountPaid: number;
+    status?: string | BookingStatus;
+    financialStatus?: string;
+    paymentStatus?: string | PaymentStatus;
+    totalAmount?: number;
+    depositAmount?: number;
+    depositPaid?: number;
+    amountPaid?: number;
     notes?: string;
   }
 ) {
-  await requireAdminSession("UPDATE_BOOKING_ADMIN");
-
-  try {
-    if (!bookingId) {
-      return { success: false, error: "Identifiant de réservation manquant." };
-    }
-
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: { invoice: true },
-    });
-
-    if (!booking) {
-      return { success: false, error: "Dossier de réservation introuvable." };
-    }
-
-    const total = Number(data.totalAmount || 0);
-    const deposit = Number(data.depositAmount || 0);
-    const paid = Number(data.amountPaid || 0);
-    const balance = Math.max(0, total - paid);
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Mise à jour de la réservation
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: data.status,
-          paymentStatus: data.paymentStatus,
-          totalAmount: total,
-          depositAmount: deposit,
-          amountPaid: paid,
-          notes: data.notes?.trim() || null,
-        },
-      });
-
-      // 2. Synchronisation de la facture si existante
-      if (booking.invoice) {
-        const subtotalHt = Math.round((total / 1.2) * 100) / 100;
-        const taxAmount = Math.round((total - subtotalHt) * 100) / 100;
-
-        let invStatus: InvoiceStatus = InvoiceStatus.EMISE;
-        if (data.status === BookingStatus.CANCELLED) {
-          invStatus = InvoiceStatus.ANNULEE;
-        } else if (paid >= total && total > 0) {
-          invStatus = InvoiceStatus.PAYEE;
-        } else if (paid > 0) {
-          invStatus = InvoiceStatus.PARTIELLEMENT_PAYEE;
-        }
-
-        await tx.invoice.update({
-          where: { id: booking.invoice.id },
-          data: {
-            totalTTC: total,
-            subtotalHT: subtotalHt,
-            taxAmount: taxAmount,
-            depositPaid: paid,
-            balanceDue: balance,
-            status: invStatus,
-          },
-        });
-      }
-    });
-
-    revalidatePath("/admin/bookings");
-    revalidatePath("/admin/clients");
-    revalidatePath("/mon-compte/reservations");
-    revalidatePath("/admin");
-
-    return {
-      success: true,
-      message: `Dossier ${booking.reference} mis à jour avec succès.`,
-    };
-  } catch (error: any) {
-    console.error("[updateBookingAdminAction] Error:", error);
-    return { success: false, error: error.message || "Erreur lors de la modification de la réservation." };
-  }
+  return updateBookingAction(bookingId, data);
 }
 
 /**

@@ -113,10 +113,19 @@ export function BookingsList({ bookings, user }: BookingsListProps) {
       return new Date(b.departure.startDate) >= new Date();
     }
     if (activeFilter === "PAID") {
-      return b.bookingStatus === "FULLY_PAID" || b.bookingStatus === "DEPOSIT_CONFIRMED" || b.paymentStatus === "FULLY_PAID" || b.paymentStatus === "DEPOSIT_PAID";
+      return (
+        b.bookingStatus === "FULLY_PAID" ||
+        b.bookingStatus === "DEPOSIT_PAID" ||
+        b.bookingStatus === "DEPOSIT_CONFIRMED" ||
+        b.paymentStatus === "VERIFIED"
+      );
     }
     if (activeFilter === "PENDING") {
-      return b.bookingStatus === "PENDING_PAYMENT" || b.bookingStatus === "PENDING_VERIFICATION" || b.paymentStatus === "UNPAID";
+      return (
+        b.bookingStatus === "PENDING_VERIFICATION" ||
+        b.bookingStatus === "PENDING_PAYMENT" ||
+        b.paymentStatus === "PENDING"
+      );
     }
     return true;
   });
@@ -142,54 +151,57 @@ export function BookingsList({ bookings, user }: BookingsListProps) {
   // Badge dynamique selon statut et réceptions en attente
   const getStatusBadge = (booking: SerializedBooking) => {
     const isCancelled =
+      booking.bookingStatus === "CANCELLED_BY_CLIENT" ||
+      booking.bookingStatus === "CANCELLED_BY_ADMIN" ||
       booking.bookingStatus === "CANCELLED" ||
       booking.bookingStatus === "ANNULEE" ||
       cancelledBookingIds.has(booking.id);
 
     if (isCancelled) {
+      const isClient = booking.bookingStatus === "CANCELLED_BY_CLIENT";
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-500/30 shadow-xs">
           <X className="w-3.5 h-3.5" />
-          <span>{isAr ? "حجز ملغى" : "Réservation Annulée"}</span>
+          <span>
+            {isAr
+              ? isClient ? "حجز ملغى من طرفكم" : "حجز ملغى من الإدارة"
+              : isClient ? "Annulé par vous" : "Annulé par l'agence"}
+          </span>
         </span>
       );
     }
 
     const hasPendingReceipt = 
       booking.bookingStatus === "PENDING_VERIFICATION" ||
-      booking.payments?.some((p) => p.status === "EN_ATTENTE") ||
+      booking.payments?.some((p) => p.status === "PENDING" || p.status === "EN_ATTENTE") ||
       submittedReceiptBookingIds.has(booking.id);
 
     if (hasPendingReceipt) {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 shadow-sm animate-pulse">
           <Clock3 className="w-3.5 h-3.5" />
-          <span>{isAr ? "وصل في طور المراجعة" : "Reçu en cours de vérification"}</span>
+          <span>{isAr ? "في انتظار التحقق الإداري" : "En attente de validation comptable"}</span>
         </span>
       );
     }
 
-    if (booking.bookingStatus === "DEPOSIT_CONFIRMED" || booking.bookingStatus === "CONFIRMED" || booking.paymentStatus === "DEPOSIT_PAID") {
+    if (
+      booking.bookingStatus === "DEPOSIT_PAID" || 
+      booking.bookingStatus === "DEPOSIT_CONFIRMED" || 
+      booking.bookingStatus === "CONFIRMED"
+    ) {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>{isAr ? "تم تأكيد الحجز (عربون مؤدى)" : "Acompte Validé & Confirmé"}</span>
+          <span>{isAr ? "تم تأكيد الحجز (عربون مؤدى)" : "Acompte Validé (Place Garantie)"}</span>
         </span>
       );
     }
-    if (booking.bookingStatus === "FULLY_PAID" || booking.paymentStatus === "FULLY_PAID" || booking.bookingStatus === "COMPLETED") {
+    if (booking.bookingStatus === "FULLY_PAID" || booking.bookingStatus === "COMPLETED") {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-cyan-500/15 text-cyan-900 dark:text-cyan-300 border border-cyan-500/30">
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>{isAr ? "خالص بالكامل 100%" : "Voyage 100% Soldé"}</span>
-        </span>
-      );
-    }
-    if (booking.bookingStatus === "CANCELLED" || booking.bookingStatus === "ANNULEE") {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-red-500/15 text-red-800 dark:text-red-400 border border-red-500/30">
-          <X className="w-3.5 h-3.5" />
-          <span>{isAr ? "ملغاة" : "Annulée"}</span>
         </span>
       );
     }

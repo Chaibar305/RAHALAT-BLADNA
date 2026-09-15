@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { PaymentStatus } from "@prisma/client";
 import { generateInvoicePdfBuffer, InvoicePdfData, InvoiceItem } from "@/lib/pdf/generateInvoice";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { requireAdminSession } from "@/lib/adminAuth";
@@ -256,7 +257,7 @@ export async function getInvoicesListAction() {
 
     const validPayments = await prisma.payment.findMany({
       where: {
-        status: "VALIDE",
+        status: PaymentStatus.VERIFIED,
       },
     });
 

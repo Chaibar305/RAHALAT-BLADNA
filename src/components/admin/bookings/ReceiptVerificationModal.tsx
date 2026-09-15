@@ -26,6 +26,7 @@ export interface BookingAdminItem {
   totalAmount: number;
   depositAmount: number;
   amountPaid: number;
+  depositPaid?: number;
   status: string;
   paymentStatus: string;
   proofUrl: string | null;

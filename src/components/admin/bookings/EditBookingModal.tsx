@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Edit3, Banknote, Calendar, Tag, ShieldCheck, Loader2, Save } from "lucide-react";
-import { updateBookingAdminAction } from "@/actions/booking.actions";
+import { X, Edit3, Banknote, Tag, ShieldCheck, Loader2, Save } from "lucide-react";
+import { updateBookingAction } from "@/actions/admin-bookings";
 import { BookingAdminItem } from "./ReceiptVerificationModal";
-import { BookingStatus, PaymentStatus } from "@prisma/client";
+import { BookingStatus } from "@prisma/client";
+import { formatMAD } from "@/lib/utils";
 
 interface EditBookingModalProps {
   isOpen: boolean;
@@ -22,8 +23,8 @@ export function EditBookingModal({
   locale = "fr",
 }: EditBookingModalProps) {
   const isAr = locale === "ar";
-  const [status, setStatus] = useState<BookingStatus>(BookingStatus.PENDING_PAYMENT);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(PaymentStatus.NON_PAYE);
+  const [status, setStatus] = useState<string>(BookingStatus.PENDING_VERIFICATION);
+  const [financialStatus, setFinancialStatus] = useState<string>("UNPAID");
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [depositAmount, setDepositAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<number>(0);
@@ -33,17 +34,80 @@ export function EditBookingModal({
 
   useEffect(() => {
     if (booking) {
-      setStatus((booking.status as BookingStatus) || BookingStatus.PENDING_PAYMENT);
-      setPaymentStatus((booking.paymentStatus as PaymentStatus) || PaymentStatus.NON_PAYE);
-      setTotalAmount(booking.totalAmount || 0);
-      setDepositAmount(booking.depositAmount || 0);
-      setAmountPaid(booking.amountPaid || 0);
+      const tot = Number(booking.totalAmount || 0);
+      const dep = Number(booking.depositAmount || 0);
+      const paid = Number(booking.depositPaid ?? booking.amountPaid ?? 0);
+
+      setTotalAmount(tot);
+      setDepositAmount(dep);
+      setAmountPaid(paid);
+      setStatus(booking.status || BookingStatus.PENDING_VERIFICATION);
       setNotes(booking.notes || "");
       setErrorMsg(null);
+
+      // Déduire le statut financier initial
+      if (
+        booking.paymentStatus === "PAYE_INTEGRALEMENT" ||
+        booking.paymentStatus === "FULLY_PAID" ||
+        (paid >= tot && tot > 0)
+      ) {
+        setFinancialStatus("FULLY_PAID");
+      } else if (
+        paid > 0 ||
+        booking.paymentStatus === "ACOMPTE_VERSE" ||
+        booking.paymentStatus === "DEPOSIT_PAID" ||
+        booking.paymentStatus === "VERIFIED"
+      ) {
+        setFinancialStatus("DEPOSIT_PAID");
+      } else {
+        setFinancialStatus("UNPAID");
+      }
     }
   }, [booking]);
 
   if (!isOpen || !booking) return null;
+
+  // 1. Liaison automatique du sélecteur "Règlement Financier"
+  const handleFinancialStatusChange = (newFin: string) => {
+    setFinancialStatus(newFin);
+
+    if (newFin === "UNPAID") {
+      setAmountPaid(0);
+      setStatus(BookingStatus.PENDING_VERIFICATION);
+    } else if (newFin === "DEPOSIT_PAID") {
+      const defaultDeposit = depositAmount > 0 ? depositAmount : 400;
+      setAmountPaid(defaultDeposit);
+      setStatus(BookingStatus.DEPOSIT_PAID);
+    } else if (newFin === "FULLY_PAID") {
+      const defaultTotal = totalAmount > 0 ? totalAmount : 1500;
+      setAmountPaid(defaultTotal);
+      setStatus(BookingStatus.FULLY_PAID);
+    }
+  };
+
+  // 2. Gestion de l'input "Encaissé Payé" avec ajustement dynamique
+  const handleAmountPaidChange = (newVal: number) => {
+    const safeVal = Math.max(0, newVal);
+    setAmountPaid(safeVal);
+
+    if (safeVal === 0) {
+      setFinancialStatus("UNPAID");
+      if (status === BookingStatus.DEPOSIT_PAID || status === BookingStatus.FULLY_PAID) {
+        setStatus(BookingStatus.PENDING_VERIFICATION);
+      }
+    } else if (safeVal >= totalAmount && totalAmount > 0) {
+      setFinancialStatus("FULLY_PAID");
+      setStatus(BookingStatus.FULLY_PAID);
+    } else {
+      setFinancialStatus("DEPOSIT_PAID");
+      if (status === BookingStatus.PENDING_VERIFICATION || status === BookingStatus.FULLY_PAID) {
+        setStatus(BookingStatus.DEPOSIT_PAID);
+      }
+    }
+  };
+
+  // 3. Calcul dynamique du solde restant
+  const soldeRestant = Math.max(0, Number(totalAmount) - Number(amountPaid));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,12 +115,13 @@ export function EditBookingModal({
     setIsSubmitting(true);
 
     try {
-      const res = await updateBookingAdminAction(booking.id, {
+      const res = await updateBookingAction(booking.id, {
         status,
-        paymentStatus,
+        financialStatus,
+        depositPaid: amountPaid,
+        amountPaid,
         totalAmount,
         depositAmount,
-        amountPaid,
         notes,
       });
 
@@ -90,7 +155,7 @@ export function EditBookingModal({
                 <h3 className="text-base font-black text-slate-900 dark:text-white">
                   {isAr ? "تعديل ملف الحجز" : "Modifier le Dossier de Réservation"}
                 </h3>
-                <span className="font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-pill">
+                <span className="font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full">
                   {booking.reference}
                 </span>
               </div>
@@ -118,38 +183,44 @@ export function EditBookingModal({
 
           {/* Statuts Dossier & Paiement */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Statut du Dossier */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-cyan-500" />
                 <span>{isAr ? "حالة ملف الحجز :" : "Statut du Dossier :"}</span>
               </label>
               <select
+                name="status"
                 value={status}
-                onChange={(e) => setStatus(e.target.value as BookingStatus)}
+                onChange={(e) => setStatus(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none font-bold"
               >
-                <option value={BookingStatus.PENDING_PAYMENT}>En Attente Paiement (PENDING_PAYMENT)</option>
-                <option value={BookingStatus.PENDING_VERIFICATION}>Reçu Téléversé (PENDING_VERIFICATION)</option>
-                <option value={BookingStatus.DEPOSIT_CONFIRMED}>Acompte Validé (DEPOSIT_CONFIRMED)</option>
-                <option value={BookingStatus.FULLY_PAID}>Soldé 100% (FULLY_PAID)</option>
-                <option value={BookingStatus.CANCELLED}>Annulée (CANCELLED)</option>
+                <option value={BookingStatus.PENDING_VERIFICATION}>🟡 En Attente Vérification (PENDING_VERIFICATION)</option>
+                <option value={BookingStatus.DEPOSIT_PAID}>🟢 Acompte Validé (DEPOSIT_PAID)</option>
+                <option value={BookingStatus.FULLY_PAID}>🔵 Soldé 100% (FULLY_PAID)</option>
+                <option value={BookingStatus.CANCELLED_BY_CLIENT}>🔴 Annulée par le client (CANCELLED_BY_CLIENT)</option>
+                <option value={BookingStatus.CANCELLED_BY_ADMIN}>⚪ Annulée par l&apos;agence (CANCELLED_BY_ADMIN)</option>
+                <option value={BookingStatus.PENDING_PAYMENT}>En Attente Paiement (Legacy)</option>
+                <option value={BookingStatus.DEPOSIT_CONFIRMED}>Acompte Confirmé (Legacy)</option>
+                <option value={BookingStatus.CANCELLED}>Annulée (Legacy)</option>
               </select>
             </div>
 
+            {/* Règlement Financier */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-cyan-500" />
                 <span>{isAr ? "حالة التسوية المالية :" : "Règlement Financier :"}</span>
               </label>
               <select
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+                name="financialStatus"
+                value={financialStatus}
+                onChange={(e) => handleFinancialStatusChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none font-bold"
               >
-                <option value={PaymentStatus.NON_PAYE}>Non Payé (0 MAD)</option>
-                <option value={PaymentStatus.ACOMPTE_VERSE}>Acompte Versé</option>
-                <option value={PaymentStatus.SOLDE_VERSE}>Solde Versé</option>
-                <option value={PaymentStatus.PAYE_INTEGRALEMENT}>Payé Intégralement (100%)</option>
+                <option value="UNPAID">{isAr ? "غير مدفوع (0 درهم)" : "Non Payé (0 MAD)"}</option>
+                <option value="DEPOSIT_PAID">{isAr ? "تم تسديد العربون" : "Acompte Réglé"}</option>
+                <option value="FULLY_PAID">{isAr ? "مسدد بالكامل (100%)" : "Totalité Soldée (100%)"}</option>
               </select>
             </div>
           </div>
@@ -158,14 +229,14 @@ export function EditBookingModal({
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
             <h4 className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1.5">
               <Banknote className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Ajustement des Montants (MAD)</span>
+              <span>{isAr ? "تعديل المبالغ المالية (MAD)" : "Ajustement des Montants (MAD)"}</span>
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Total TTC */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  Total TTC (MAD) :
+                  {isAr ? "المجموع شامل الضريبة :" : "Total TTC (MAD) :"}
                 </label>
                 <input
                   type="number"
@@ -180,7 +251,7 @@ export function EditBookingModal({
               {/* Acompte Requis */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  Acompte (MAD) :
+                  {isAr ? "العربون المطلوب :" : "Acompte (MAD) :"}
                 </label>
                 <input
                   type="number"
@@ -195,24 +266,24 @@ export function EditBookingModal({
               {/* Montant Payé Encaissé */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  Encaissé Payé (MAD) :
+                  {isAr ? "المبلغ المقبوض الفعلي :" : "Encaissé Payé (MAD) :"}
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="10"
                   value={amountPaid}
-                  onChange={(e) => setAmountPaid(Number(e.target.value))}
+                  onChange={(e) => handleAmountPaidChange(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl text-xs font-mono font-black bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Reste à payer calculé */}
+            {/* Reste à payer calculé en direct */}
             <div className="pt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700/60">
-              <span>Solde restant au départ :</span>
-              <span className="font-mono font-black text-amber-600 dark:text-amber-400">
-                {Math.max(0, totalAmount - amountPaid)} MAD
+              <span>{isAr ? "المبلغ المتبقي عند الانطلاق :" : "Solde restant au départ :"}</span>
+              <span className="font-mono font-black text-amber-600 dark:text-amber-400 text-sm">
+                {formatMAD(soldeRestant, locale)}
               </span>
             </div>
           </div>

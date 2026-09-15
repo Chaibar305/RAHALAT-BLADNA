@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { PaymentStatus, BookingStatus } from "@prisma/client";
 import { logSecurityAudit } from "@/lib/adminAuth";
 import { getCurrentTeamMemberPermissions } from "@/lib/teamPermissions";
 
@@ -561,7 +562,7 @@ export async function collectCashBalanceAction(bookingId: string, cashAmount: nu
         amount: cashAmount,
         type: "SOLDE",
         method: "ESPECES",
-        status: "VALIDE",
+        status: PaymentStatus.VERIFIED,
       },
     });
 
@@ -569,9 +570,10 @@ export async function collectCashBalanceAction(bookingId: string, cashAmount: nu
     const updated = await prisma.booking.update({
       where: { id: booking.id },
       data: {
+        depositPaid: newPaid,
         amountPaid: newPaid,
-        paymentStatus: newBalance <= 0 ? "PAYE_INTEGRALEMENT" : "ACOMPTE_VERSE",
-        status: newBalance <= 0 ? "FULLY_PAID" : booking.status,
+        paymentStatus: PaymentStatus.VERIFIED,
+        status: newBalance <= 0 ? BookingStatus.FULLY_PAID : booking.status,
       },
     });
 

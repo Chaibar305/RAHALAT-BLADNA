@@ -440,17 +440,27 @@ model TripPartner {
 // ====================================================
 
 enum BookingStatus {
-  PENDING_PAYMENT        // En attente de paiement / virement
-  PENDING_VERIFICATION   // Reçu bancaire téléversé sur Cloudflare R2, en attente de vérification admin
-  DEPOSIT_CONFIRMED      // Acompte validé (place réservée, billet d'embarquement généré)
-  FULLY_PAID             // Solde restant intégralement payé
-  CANCELLED              // Annulée
-  EN_ATTENTE             // Compatibilité legacy
-  CONFIRMEE              // Compatibilité legacy
-  ANNULEE                // Compatibilité legacy
+  PENDING_VERIFICATION // 🟡 Réservé par le client, en attente de validation du virement/acompte
+  DEPOSIT_PAID         // 🟢 Acompte validé par l'admin (Reçu vérifié ou espèces reçues)
+  FULLY_PAID           // 🔵 Totalité du voyage réglée
+  CANCELLED_BY_CLIENT  // 🔴 Annulée par le client
+  CANCELLED_BY_ADMIN   // ⚪ Annulée / Rejetée par l'agence
+
+  // Compatibilité legacy
+  DEPOSIT_CONFIRMED
+  CANCELLED
+  PENDING_PAYMENT
+  EN_ATTENTE
+  CONFIRMEE
+  ANNULEE
 }
 
 enum PaymentStatus {
+  PENDING              // En attente de contrôle
+  VERIFIED             // Validé et encaissé sur le compte bancaire
+  REJECTED             // Reçu illisible ou virement non reçu
+
+  // Compatibilité legacy
   NON_PAYE
   ACOMPTE_VERSE
   SOLDE_VERSE
@@ -468,11 +478,12 @@ model Booking {
   userId          String
   tripId          String
   departureDateId String?
-  status          BookingStatus @default(PENDING_PAYMENT)
+  status          BookingStatus @default(PENDING_VERIFICATION)
   totalAmount     Decimal       @db.Decimal(10, 2)
   depositAmount   Decimal       @db.Decimal(10, 2)
+  depositPaid     Decimal       @default(0) @db.Decimal(10, 2) // ⚠️ 0 tant que l'admin n'a pas validé !
   amountPaid      Decimal       @default(0) @db.Decimal(10, 2)
-  paymentStatus   PaymentStatus @default(NON_PAYE)
+  paymentStatus   PaymentStatus @default(PENDING)
   qrCodeToken     String?       @unique @default(cuid())
   notes           String?
   cancelledAt     DateTime?
@@ -592,15 +603,18 @@ enum PaymentValidationStatus {
 }
 
 model Payment {
-  id        String                  @id @default(cuid())
-  bookingId String
-  amount    Decimal                 @db.Decimal(10, 2)
-  type      PaymentType
-  method    PaymentMethod
-  status    PaymentValidationStatus @default(EN_ATTENTE)
-  proofUrl  String?                 // Preuve virement bancaire sur Cloudflare R2
-  createdAt DateTime                @default(now())
-  updatedAt DateTime                @updatedAt
+  id         String        @id @default(cuid())
+  bookingId  String
+  amount     Decimal       @db.Decimal(10, 2)
+  type       PaymentType   @default(ACOMPTE)
+  method     PaymentMethod @default(VIREMENT)
+  status     PaymentStatus @default(PENDING) // ⚠️ PENDING tant que non validé
+  receiptUrl String?       // Reçu Cloudflare R2
+  proofUrl   String?       // Alias rétro-compatibilité
+  verifiedAt DateTime?
+  verifiedBy String?       // Nom de l'admin ayant validé
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 

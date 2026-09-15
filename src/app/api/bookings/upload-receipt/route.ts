@@ -55,12 +55,13 @@ export async function POST(req: NextRequest) {
         amount: paymentAmount,
         type: paid > 0 ? "SOLDE" : "ACOMPTE",
         method: "VIREMENT",
-        status: "EN_ATTENTE",
+        status: "PENDING",
+        receiptUrl: receiptUrl,
         proofUrl: receiptUrl,
       },
     });
 
-    // Mise à jour de la réservation
+    // Mise à jour de la réservation en statut PENDING_VERIFICATION
     const updatedNotes = notes
       ? `${booking.notes ? booking.notes + "\n" : ""}[Reçu virement ${bankName}: ${receiptUrl}] ${notes}`
       : booking.notes;
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     await prisma.booking.update({
       where: { id: booking.id },
       data: {
+        status: "PENDING_VERIFICATION",
         notes: updatedNotes,
       },
     });

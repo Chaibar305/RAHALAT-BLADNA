@@ -55,6 +55,20 @@ type ScanResultModal =
     }
   | null;
 
+// Helper pour obtenir un flux vidéo temporaire (débloque les labels et l'accès caméra)
+async function getCameraStream(): Promise<MediaStream> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Périphérique caméra non supporté par ce navigateur");
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+    });
+  } catch {
+    return await navigator.mediaDevices.getUserMedia({ video: true });
+  }
+}
+
 export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOperator }: LiveBoardingScannerProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
@@ -78,6 +92,9 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   // 3. Scanner Camera State
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const selectedCameraIdRef = useRef<string>('');
   const [isScannerRunning, setIsScannerRunning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isTorchOn, setIsTorchOn] = useState(false);
@@ -130,74 +147,80 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   }, [selectedTripId, loadTripData]);
 
   // Initialisation et démarrage du scanner caméra
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
+  const startCamera = useCallback(
+    async (cameraIdToUse?: string, facingModeToUse?: "environment" | "user") => {
+      setCameraError(null);
 
-    try {
-      const elementId = "reader-viewport";
-      const container = document.getElementById(elementId);
-      if (!container) return;
-
-      if (scannerRef.current) {
-        try {
-          if (scannerRef.current.isScanning) {
-            await scannerRef.current.stop();
-          }
-          scannerRef.current.clear();
-        } catch {}
-      }
-
-      const html5QrCode = new Html5Qrcode(elementId, {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-        ],
-        verbose: false,
-      });
-
-      scannerRef.current = html5QrCode;
-
-      const config = {
-        fps: 15,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-      };
-
-      await html5QrCode.start(
-        { facingMode },
-        config,
-        (decodedText) => {
-          handleDetectedCodeRef.current?.(decodedText);
-        },
-        () => {
-          // Erreur frame normale pendant le scan, ignorer
-        }
-      );
-
-      setIsScannerRunning(true);
-
-      // Vérifier support torche / flash
       try {
-        const capabilities: any = html5QrCode.getRunningTrackCapabilities();
-        if (capabilities && capabilities.torch) {
-          setIsTorchSupported(true);
-        } else {
+        const elementId = "reader-viewport";
+        const container = document.getElementById(elementId);
+        if (!container) return;
+
+        if (scannerRef.current) {
+          try {
+            if (scannerRef.current.isScanning) {
+              await scannerRef.current.stop();
+            }
+            scannerRef.current.clear();
+          } catch {}
+        }
+
+        const html5QrCode = new Html5Qrcode(elementId, {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+          ],
+          verbose: false,
+        });
+
+        scannerRef.current = html5QrCode;
+
+        const config = {
+          fps: 15,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        };
+
+        const targetCameraId = cameraIdToUse ?? (selectedCameraIdRef.current || selectedCameraId);
+        const cameraChoice = targetCameraId ? targetCameraId : { facingMode: facingModeToUse || facingMode };
+
+        await html5QrCode.start(
+          cameraChoice,
+          config,
+          (decodedText) => {
+            handleDetectedCodeRef.current?.(decodedText);
+          },
+          () => {
+            // Erreur frame normale pendant le scan, ignorer
+          }
+        );
+
+        setIsScannerRunning(true);
+
+        // Vérifier support torche / flash
+        try {
+          const capabilities: any = html5QrCode.getRunningTrackCapabilities();
+          if (capabilities && capabilities.torch) {
+            setIsTorchSupported(true);
+          } else {
+            setIsTorchSupported(false);
+          }
+        } catch {
           setIsTorchSupported(false);
         }
-      } catch {
-        setIsTorchSupported(false);
+      } catch (err: any) {
+        console.warn("Camera start failed:", err);
+        setIsScannerRunning(false);
+        setCameraError(
+          err.name === "NotAllowedError"
+            ? "Permission caméra refusée. Veuillez autoriser l'accès à la caméra dans vos réglages."
+            : "Impossible d'accéder à la caméra de l'appareil."
+        );
       }
-    } catch (err: any) {
-      console.warn("Camera start failed:", err);
-      setIsScannerRunning(false);
-      setCameraError(
-        err.name === "NotAllowedError"
-          ? "Permission caméra refusée. Veuillez autoriser l'accès à la caméra dans vos réglages."
-          : "Impossible d'accéder à la caméra de l'appareil."
-      );
-    }
-  }, [facingMode]);
+    },
+    [selectedCameraId, facingMode]
+  );
 
   const stopCamera = useCallback(async () => {
     if (scannerRef.current && scannerRef.current.isScanning) {
@@ -315,11 +338,33 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
   };
 
-  // Bascule caméra avant / arrière
-  const switchCameraFacing = async () => {
+  // Bascule caméra avant / arrière / multi-objectifs
+  const switchCamera = async (targetCameraId?: string) => {
     await stopCamera();
-    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+
+    if (targetCameraId) {
+      setSelectedCameraId(targetCameraId);
+      selectedCameraIdRef.current = targetCameraId;
+      await startCamera(targetCameraId);
+      return;
+    }
+
+    if (availableCameras.length > 1) {
+      const currentId = selectedCameraIdRef.current || selectedCameraId;
+      const currentIndex = availableCameras.findIndex((cam) => cam.deviceId === currentId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      const nextCamera = availableCameras[nextIndex];
+      setSelectedCameraId(nextCamera.deviceId);
+      selectedCameraIdRef.current = nextCamera.deviceId;
+      await startCamera(nextCamera.deviceId);
+    } else {
+      const nextMode = facingMode === "environment" ? "user" : "environment";
+      setFacingMode(nextMode);
+      await startCamera(undefined, nextMode);
+    }
   };
+
+  const switchCameraFacing = () => switchCamera();
 
   // Soumission manuelle
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -381,10 +426,51 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
   };
 
-  // Lancement initial de la caméra
+  // Énumération des caméras et démarrage initial du scanner
   useEffect(() => {
-    startCamera();
+    let isCancelled = false;
+
+    async function loadCameras() {
+      try {
+        // 1. Demander une première autorisation pour pouvoir lire les labels des caméras
+        const initialStream = await getCameraStream();
+        initialStream.getTracks().forEach((track) => track.stop()); // Libérer le flux temporaire
+
+        // 2. Énumérer les périphériques réels
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+        if (isCancelled) return;
+        setAvailableCameras(videoDevices);
+
+        let chosenCameraId = "";
+        if (videoDevices.length > 0) {
+          // Sélectionne en priorité la caméra arrière si identifiée, sinon la première disponible
+          const backCamera = videoDevices.find((d) =>
+            d.label.toLowerCase().includes("back") ||
+            d.label.toLowerCase().includes("arrière") ||
+            d.label.toLowerCase().includes("environment")
+          );
+          chosenCameraId = backCamera ? backCamera.deviceId : videoDevices[0].deviceId;
+          setSelectedCameraId(chosenCameraId);
+          selectedCameraIdRef.current = chosenCameraId;
+        }
+
+        if (!isCancelled) {
+          await startCamera(chosenCameraId || undefined);
+        }
+      } catch (err) {
+        console.error("Erreur accès caméras :", err);
+        if (!isCancelled) {
+          await startCamera();
+        }
+      }
+    }
+
+    loadCameras();
+
     return () => {
+      isCancelled = true;
       stopCamera();
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
@@ -559,7 +645,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
                   <CameraOff className="w-10 h-10 text-red-500" />
                   <p className="text-xs text-red-600 dark:text-red-300 font-bold max-w-xs">{cameraError}</p>
                   <button
-                    onClick={startCamera}
+                    onClick={() => startCamera()}
                     className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold transition shadow-sm"
                   >
                     Réessayer
@@ -604,12 +690,18 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
           {/* Bouton Bascule Caméra (Front/Back) */}
           <button
             type="button"
-            onClick={switchCameraFacing}
+            onClick={() => switchCamera()}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition active:scale-95 flex items-center gap-1.5 shadow-sm"
-            title="Changer de caméra"
+            title={
+              availableCameras.length > 1
+                ? `Changer d'objectif (${availableCameras.find((c) => c.deviceId === selectedCameraId)?.label || "Caméra"})`
+                : "Changer de caméra"
+            }
           >
             <RefreshCw className="w-4 h-4" />
-            <span className="hidden xs:inline">Caméra</span>
+            <span className="hidden xs:inline">
+              {availableCameras.length > 1 ? `Objectif (${availableCameras.length})` : "Caméra"}
+            </span>
           </button>
 
           {/* Bouton Saisie Manuelle (Code endommagé) */}
@@ -623,6 +715,30 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
             <span>Saisie manuelle</span>
           </button>
         </div>
+
+        {/* Sélecteur de capteur si plusieurs caméras détectées */}
+        {availableCameras.length > 1 && (
+          <div className="w-full max-w-sm mt-3 flex items-center justify-center animate-in fade-in">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 shadow-sm max-w-full">
+              <Camera className="w-3.5 h-3.5 text-cyan-600 dark:text-tp-cyan shrink-0" />
+              <select
+                value={selectedCameraId}
+                onChange={(e) => switchCamera(e.target.value)}
+                className="bg-transparent text-slate-700 dark:text-slate-200 font-semibold text-xs focus:outline-none cursor-pointer truncate max-w-[240px]"
+              >
+                {availableCameras.map((cam, idx) => (
+                  <option
+                    key={cam.deviceId || idx}
+                    value={cam.deviceId}
+                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                  >
+                    {cam.label || `Caméra ${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ========================================================================= */}

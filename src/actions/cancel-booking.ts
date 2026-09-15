@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { BookingStatus, InvoiceStatus, NotificationType } from "@prisma/client";
+import { BookingStatus, InvoiceStatus, NotificationType, PaymentStatus } from "@prisma/client";
 
 export interface CancelBookingResult {
   success: boolean;
@@ -67,7 +67,12 @@ export async function cancelBookingAction(
     }
 
     // Vérification de l'état actuel : déjà annulé ?
-    if (booking.status === BookingStatus.CANCELLED || booking.status === "ANNULEE") {
+    if (
+      booking.status === BookingStatus.CANCELLED_BY_CLIENT ||
+      booking.status === BookingStatus.CANCELLED_BY_ADMIN ||
+      booking.status === BookingStatus.CANCELLED ||
+      (booking.status as any) === "ANNULEE"
+    ) {
       return {
         success: false,
         error: "Cette réservation est déjà annulée.",
@@ -88,18 +93,32 @@ export async function cancelBookingAction(
 
     // 3. Transaction atomique Prisma
     await prisma.$transaction(async (tx) => {
-      // A. Mettre à jour le statut du booking, date d'annulation et motif
+      // A. Mettre à jour le statut du booking en CANCELLED_BY_CLIENT, date d'annulation et motif
       await tx.booking.update({
         where: { id: bookingId },
         data: {
-          status: BookingStatus.CANCELLED,
+          status: BookingStatus.CANCELLED_BY_CLIENT,
           cancelledAt: new Date(),
           cancellationReason: formattedReason,
+          paymentStatus: PaymentStatus.REJECTED,
           notes: `${booking.notes ? booking.notes + "\n" : ""}[ANNULATION VOYAGEUR ${new Date().toLocaleDateString("fr-FR")}]: ${formattedReason}`,
         },
       });
 
-      // B. Annuler la facture rattachée si existante
+      // B. Rejeter les paiements en attente
+      await tx.payment.updateMany({
+        where: {
+          bookingId,
+          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+        },
+        data: {
+          status: PaymentStatus.REJECTED,
+          verifiedAt: new Date(),
+          verifiedBy: clientName,
+        },
+      });
+
+      // C. Annuler la facture rattachée si existante
       if (booking.invoice) {
         await tx.invoice.update({
           where: { id: booking.invoice.id },
@@ -107,7 +126,7 @@ export async function cancelBookingAction(
         });
       }
 
-      // C. Libération des Quotas sur la date de départ
+      // D. Libération des Quotas sur la date de départ
       if (booking.departureDateId) {
         const dep = await tx.departureDate.findUnique({
           where: { id: booking.departureDateId },

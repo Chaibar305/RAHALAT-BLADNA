@@ -1,4 +1,4 @@
-import { PrismaClient, TeamRole, PartnerType, PartnerStatus, BookingStatus, PaymentStatus, TravelerCategory, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod, PaymentValidationStatus } from "@prisma/client";
+import { PrismaClient, TeamRole, PartnerType, PartnerStatus, BookingStatus, PaymentStatus, TravelerCategory, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -552,7 +552,7 @@ async function main() {
               amount: 1000.00,
               type: PaymentType.ACOMPTE,
               method: PaymentMethod.VIREMENT,
-              status: PaymentValidationStatus.VALIDE,
+              status: PaymentStatus.VERIFIED,
               proofUrl: "https://pub-a7e412da142148a89892728e019eb7e2.r2.dev/receipts/rec-00125.jpg",
             },
           ],
@@ -610,7 +610,7 @@ async function main() {
               amount: 890.00,
               type: PaymentType.PAIEMENT_COMPLET,
               method: PaymentMethod.CARTE,
-              status: PaymentValidationStatus.VALIDE,
+              status: PaymentStatus.VERIFIED,
             },
           ],
         },

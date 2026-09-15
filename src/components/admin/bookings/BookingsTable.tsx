@@ -85,7 +85,7 @@ export function BookingsTable({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {filteredBookings.map((b) => {
                   const balance = Math.max(0, b.totalAmount - b.amountPaid);
-                  const isVerified = b.status === "DEPOSIT_CONFIRMED" || b.status === "FULLY_PAID";
+                  const isVerified = b.status === "DEPOSIT_PAID" || b.status === "DEPOSIT_CONFIRMED" || b.status === "FULLY_PAID";
                   const isPendingReview = b.status === "PENDING_VERIFICATION";
 
                   const cleanPhone = b.clientPhone.replace(/[^0-9]/g, "");
@@ -171,12 +171,14 @@ export function BookingsTable({
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
                             b.status === "PENDING_VERIFICATION"
                               ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse"
-                              : b.status === "DEPOSIT_CONFIRMED"
+                              : b.status === "DEPOSIT_PAID" || b.status === "DEPOSIT_CONFIRMED"
                               ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
                               : b.status === "FULLY_PAID"
                               ? "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30"
-                              : b.status === "CANCELLED"
+                              : b.status === "CANCELLED_BY_CLIENT"
                               ? "bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                              : b.status === "CANCELLED_BY_ADMIN" || b.status === "CANCELLED"
+                              ? "bg-slate-500/20 text-slate-700 dark:text-slate-300 border border-slate-500/30"
                               : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                           }`}
                         >
@@ -185,7 +187,7 @@ export function BookingsTable({
                               <AlertTriangle className="w-3 h-3" />
                               <span>À Vérifier</span>
                             </>
-                          ) : b.status === "DEPOSIT_CONFIRMED" ? (
+                          ) : b.status === "DEPOSIT_PAID" || b.status === "DEPOSIT_CONFIRMED" ? (
                             <>
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Acompte Validé</span>
@@ -195,8 +197,10 @@ export function BookingsTable({
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Soldé 100%</span>
                             </>
-                          ) : b.status === "CANCELLED" ? (
-                            <span>Annulée</span>
+                          ) : b.status === "CANCELLED_BY_CLIENT" ? (
+                            <span>Annulée (Client)</span>
+                          ) : b.status === "CANCELLED_BY_ADMIN" || b.status === "CANCELLED" ? (
+                            <span>Annulée (Agence)</span>
                           ) : (
                             <span>En Attente</span>
                           )}
@@ -262,7 +266,7 @@ export function BookingsTable({
                           )}
 
                           {/* Bouton Annuler Dossier */}
-                          {b.status !== "CANCELLED" && (
+                          {!b.status.startsWith("CANCELLED") && b.status !== "ANNULEE" && (
                             <button
                               type="button"
                               onClick={() => onCancelBooking(b.id)}

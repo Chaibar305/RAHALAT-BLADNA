@@ -9,16 +9,18 @@ import {
 import { formatMAD } from "@/lib/utils";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
+import { PaymentStatus, BookingStatus } from "@prisma/client";
 
 export default async function AdminDashboardPage({
   params: { locale },
 }: {
   params: { locale: string };
 }) {
-  await requireAdminSession("ADMIN_DASHBOARD", locale);
+  await requireAdminSession("VIEW_ADMIN_DASHBOARD");
+  const t = await getTranslations({ locale, namespace: "admin" });
   const isAr = locale === "ar";
 
-  // 1. Agrégations financières et métriques réelles depuis Supabase
+  // 1. Indicateurs Réels calculés via Prisma ORM
   let totalRevenue = 0;
   let totalDeposits = 0;
   let confirmedBookingsCount = 0;
@@ -30,22 +32,28 @@ export default async function AdminDashboardPage({
   try {
     const revenueAgg = await prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { status: "VALIDE" },
+      where: { status: PaymentStatus.VERIFIED },
     });
-    totalRevenue = Number(revenueAgg._sum.amount || 0);
+    totalRevenue = Number(revenueAgg._sum?.amount || 0);
 
     const depositsAgg = await prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { type: "ACOMPTE", status: "VALIDE" },
+      where: { type: "ACOMPTE", status: PaymentStatus.VERIFIED },
     });
-    totalDeposits = Number(depositsAgg._sum.amount || 0);
+    totalDeposits = Number(depositsAgg._sum?.amount || 0);
 
     confirmedBookingsCount = await prisma.booking.count({
-      where: { status: "CONFIRMEE" },
+      where: {
+        status: { in: [BookingStatus.DEPOSIT_PAID, BookingStatus.FULLY_PAID, "DEPOSIT_CONFIRMED" as any, "CONFIRMEE" as any] },
+      },
     });
 
     totalTravelersCount = await prisma.traveler.count({
-      where: { booking: { status: "CONFIRMEE" } },
+      where: {
+        booking: {
+          status: { in: [BookingStatus.DEPOSIT_PAID, BookingStatus.FULLY_PAID, "DEPOSIT_CONFIRMED" as any, "CONFIRMEE" as any] },
+        },
+      },
     });
 
     activeTripsCount = await prisma.trip.count({
@@ -53,7 +61,7 @@ export default async function AdminDashboardPage({
     });
 
     pendingPaymentsCount = await prisma.payment.count({
-      where: { status: "EN_ATTENTE" },
+      where: { status: PaymentStatus.PENDING },
     });
 
     const dbBookings = await prisma.booking.findMany({

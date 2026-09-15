@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { PaymentStatus } from "@prisma/client";
 
 /**
  * Retourne les compteurs dynamiques pour la sidebar admin.
@@ -10,7 +11,7 @@ export async function getAdminSidebarCountsAction() {
   try {
     const [bookingsCount, pendingPaymentsCount] = await Promise.all([
       prisma.booking.count(),
-      prisma.payment.count({ where: { status: "EN_ATTENTE" } }),
+      prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
     ]);
 
     return { success: true, bookingsCount, pendingPaymentsCount };

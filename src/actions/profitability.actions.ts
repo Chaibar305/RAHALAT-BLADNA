@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { BookingStatus, PaymentStatus } from "@prisma/client";
 import { requireAdminSession } from "@/lib/adminAuth";
 
 export interface TripProfitabilityResult {
@@ -46,11 +47,13 @@ export async function calculateTripProfitability(tripId: string): Promise<{
         },
         departureDates: true,
         bookings: {
-          where: { status: "CONFIRMEE" },
+          where: {
+            status: { in: [BookingStatus.DEPOSIT_PAID, BookingStatus.FULLY_PAID, BookingStatus.CONFIRMEE] },
+          },
           include: {
             travelers: true,
             payments: {
-              where: { status: "VALIDE" },
+              where: { status: PaymentStatus.VERIFIED },
             },
           },
         },
