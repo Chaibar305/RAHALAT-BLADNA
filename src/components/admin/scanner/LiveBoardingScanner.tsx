@@ -37,7 +37,16 @@ interface LiveBoardingScannerProps {
   initialOperator?: any;
 }
 
-type ScanResultModal = 
+type ErrorSubType =
+  | "NOT_FOUND"        // QR inconnu
+  | "WRONG_TRIP"       // Passager d'un autre voyage
+  | "CANCELLED"        // Réservation annulée
+  | "NETWORK"          // Erreur réseau / serveur
+  | "PERMISSION"       // Accès refusé (profil inactif ou sans permission)
+  | "NO_TRIP"          // Aucun voyage sélectionné
+  | "GENERIC";         // Autre erreur technique
+
+type ScanResultModal =
   | {
       type: "SUCCESS";
       data: any;
@@ -48,8 +57,10 @@ type ScanResultModal =
     }
   | {
       type: "ERROR";
+      subType: ErrorSubType;
       title: string;
       message: string;
+      canRetryImmediately: boolean; // true = reprend le scan auto, false = attend l'action utilisateur
       details?: any;
     }
   | null;
@@ -88,11 +99,16 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   const [isManualInputOpen, setIsManualInputOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [isSubmittingCheckIn, setIsSubmittingCheckIn] = useState(false);
+  const [retryCount, setRetryCount] = useState(0); // Compteur de tentatives réseau
 
   // 4. Modal de résultat de scan
   const [scanModal, setScanModal] = useState<ScanResultModal>(null);
   const [countdown, setCountdown] = useState<number>(3);
   const [isCollectingCash, setIsCollectingCash] = useState(false);
+
+  // Ref pour cooldown anti-doublon (évite les double-scans involontaires)
+  const lastScannedCodeRef = useRef<string>("");
+  const lastScannedAtRef = useRef<number>(0);
 
   // 5. Drawer Feuille de route
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -342,37 +358,136 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   };
   handleDetectedCodeRef.current = handleDetectedCode;
 
-  // Traitement Métier du Pointage
-  const processCheckIn = async (code: string) => {
+  // Traitement Métier du Pointage — avec classification fine des erreurs
+  const processCheckIn = async (code: string, attempt = 1) => {
+    // Protection anti-doublon : rejeter le même code scanné dans les 4 secondes
+    const now = Date.now();
+    if (code === lastScannedCodeRef.current && now - lastScannedAtRef.current < 4000) {
+      isProcessingRef.current = false;
+      isScanningRef.current = true;
+      if (videoRef.current && currentStreamRef.current?.active) {
+        startScanningLoop(videoRef.current);
+      }
+      return;
+    }
+
+    if (!selectedTripId) {
+      sensoryFeedback.playError();
+      setScanModal({
+        type: "ERROR",
+        subType: "NO_TRIP",
+        title: "Aucun Voyage Sélectionné",
+        message: "Veuillez d'abord sélectionner un circuit dans le menu déroulant avant de scanner.",
+        canRetryImmediately: false,
+      });
+      setIsSubmittingCheckIn(false);
+      isProcessingRef.current = false;
+      return;
+    }
+
     setIsSubmittingCheckIn(true);
     try {
       const result = await checkInPassengerAction(code, selectedTripId);
 
+      // Enregistrer le code scanné pour protection anti-doublon
+      lastScannedCodeRef.current = code;
+      lastScannedAtRef.current = Date.now();
+      setRetryCount(0);
+
       if (result.status === "SUCCESS") {
         sensoryFeedback.playSuccess();
         setScanModal({ type: "SUCCESS", data: result });
-        // Rafraîchir les stats en direct
         loadTripData(selectedTripId);
-        // Démarrer compte à rebours de reprise auto (3 secondes)
         startAutoResumeTimer();
+
       } else if (result.status === "ALREADY_CHECKED_IN") {
         sensoryFeedback.playWarning();
         setScanModal({ type: "ALREADY_CHECKED_IN", data: result });
+
+      } else if (result.status === "WRONG_TRIP") {
+        sensoryFeedback.playError();
+        setScanModal({
+          type: "ERROR",
+          subType: "WRONG_TRIP",
+          title: "Passager sur un Autre Voyage",
+          message: result.error || `Ce billet est associé au voyage : "${(result as any).tripTitle}".
+Vérifiez le circuit sélectionné.`,
+          canRetryImmediately: false,
+          details: result,
+        });
+
+      } else if (result.status === "CANCELLED") {
+        sensoryFeedback.playError();
+        setScanModal({
+          type: "ERROR",
+          subType: "CANCELLED",
+          title: "Réservation Annulée",
+          message: result.error || "Ce dossier a été annulé. Le passager ne peut pas embarquer.",
+          canRetryImmediately: false,
+          details: result,
+        });
+
+      } else if (result.status === "NOT_FOUND") {
+        sensoryFeedback.playError();
+        setScanModal({
+          type: "ERROR",
+          subType: "NOT_FOUND",
+          title: "QR Code Non Reconnu",
+          message: result.error || "Aucune réservation ne correspond à ce code. Vérifiez le billet ou utilisez la saisie manuelle.",
+          canRetryImmediately: true,
+          details: result,
+        });
+
+      } else if (result.status === "ERROR" && (result.error?.includes("inactif") || result.error?.includes("permission"))) {
+        sensoryFeedback.playError();
+        setScanModal({
+          type: "ERROR",
+          subType: "PERMISSION",
+          title: "Accès Refusé",
+          message: result.error || "Votre profil ne dispose pas de la permission de pointer les billets.",
+          canRetryImmediately: false,
+          details: result,
+        });
+
       } else {
         sensoryFeedback.playError();
         setScanModal({
           type: "ERROR",
-          title: result.status === "WRONG_TRIP" ? "Voyage Différent" : "QR Code Non Reconnu",
-          message: result.error || "Billet invalide",
+          subType: "GENERIC",
+          title: "Erreur de Validation",
+          message: result.error || "Impossible de valider ce billet. Réessayez ou utilisez la saisie manuelle.",
+          canRetryImmediately: true,
           details: result,
         });
       }
+
     } catch (err: any) {
       sensoryFeedback.playError();
+      const isNetworkError =
+        err.name === "TypeError" ||
+        err.message?.includes("fetch") ||
+        err.message?.includes("network") ||
+        err.message?.includes("Failed");
+
+      // Retry automatique jusqu'à 2 fois pour les erreurs réseau
+      if (isNetworkError && attempt <= 2) {
+        setRetryCount(attempt);
+        const delay = attempt * 1200; // 1.2s puis 2.4s
+        await new Promise((r) => setTimeout(r, delay));
+        setIsSubmittingCheckIn(false);
+        await processCheckIn(code, attempt + 1);
+        return;
+      }
+
+      setRetryCount(0);
       setScanModal({
         type: "ERROR",
-        title: "Erreur Technique",
-        message: err.message || "Impossible de valider ce billet.",
+        subType: isNetworkError ? "NETWORK" : "GENERIC",
+        title: isNetworkError ? "Problème de Connexion" : "Erreur Technique",
+        message: isNetworkError
+          ? `Impossible de joindre le serveur. Vérifiez votre connexion internet.${attempt > 1 ? ` (${attempt - 1} tentative${attempt > 2 ? "s" : ""})` : ""}`
+          : err.message || "Une erreur inattendue s'est produite.",
+        canRetryImmediately: false,
       });
     } finally {
       setIsSubmittingCheckIn(false);
@@ -984,34 +1099,116 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
               </>
             )}
 
-            {/* CAS 3 : ERREUR / MAUVAIS VOYAGE / CODE INVALIDE */}
-            {scanModal.type === "ERROR" && (
-              <>
-                <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto ring-8 ring-red-500/10">
-                  <XCircle className="w-9 h-9" />
-                </div>
+            {/* CAS 3 : ERREUR — Affichage contextuel selon sous-type */}
+            {scanModal.type === "ERROR" && (() => {
+              const isWrongTrip = scanModal.subType === "WRONG_TRIP";
+              const isCancelled = scanModal.subType === "CANCELLED";
+              const isNetwork = scanModal.subType === "NETWORK";
+              const isPermission = scanModal.subType === "PERMISSION";
+              const isNoTrip = scanModal.subType === "NO_TRIP";
+              const isNotFound = scanModal.subType === "NOT_FOUND";
 
-                <div className="space-y-1">
-                  <span className="inline-block px-3 py-1 rounded-full bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-400 font-black text-[10px] uppercase tracking-wider border border-red-300 dark:border-red-500/30">
-                    {scanModal.title}
-                  </span>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                    Accès Refusé
-                  </h3>
-                  <p className="text-xs text-red-600 dark:text-red-300 font-bold">
-                    {scanModal.message}
-                  </p>
-                </div>
+              const iconColor = isWrongTrip
+                ? "text-amber-600 dark:text-amber-400 bg-amber-500/20 ring-amber-500/10"
+                : isCancelled
+                ? "text-red-600 dark:text-red-400 bg-red-500/20 ring-red-500/10"
+                : isNetwork
+                ? "text-blue-600 dark:text-blue-400 bg-blue-500/20 ring-blue-500/10"
+                : isPermission
+                ? "text-slate-600 dark:text-slate-400 bg-slate-500/20 ring-slate-500/10"
+                : "text-red-600 dark:text-red-400 bg-red-500/20 ring-red-500/10";
 
-                <button
-                  type="button"
-                  onClick={closeModalAndResume}
-                  className="w-full py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition active:scale-95 shadow-md shadow-red-600/20"
-                >
-                  Réessayer
-                </button>
-              </>
-            )}
+              const badgeColor = isWrongTrip
+                ? "bg-amber-500/10 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border-amber-300 dark:border-amber-500/30"
+                : isCancelled || isPermission
+                ? "bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30"
+                : isNetwork
+                ? "bg-blue-500/10 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30"
+                : isNoTrip
+                ? "bg-slate-500/10 dark:bg-slate-500/20 text-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-500/30"
+                : "bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30";
+
+              const btnColor = isWrongTrip
+                ? "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20"
+                : isNetwork
+                ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20"
+                : isNoTrip
+                ? "bg-slate-700 hover:bg-slate-600 text-white shadow-slate-700/20"
+                : "bg-red-600 hover:bg-red-500 text-white shadow-red-600/20";
+
+              return (
+                <>
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ring-8 ${iconColor}`}>
+                    {isWrongTrip ? (
+                      <AlertTriangle className="w-9 h-9" />
+                    ) : isNetwork ? (
+                      <RefreshCw className="w-9 h-9" />
+                    ) : isPermission ? (
+                      <ShieldCheck className="w-9 h-9" />
+                    ) : isNoTrip ? (
+                      <QrCode className="w-9 h-9" />
+                    ) : (
+                      <XCircle className="w-9 h-9" />
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className={`inline-block px-3 py-1 rounded-full font-black text-[10px] uppercase tracking-wider border ${badgeColor}`}>
+                      {scanModal.title}
+                    </span>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed max-w-xs mx-auto whitespace-pre-line">
+                      {scanModal.message}
+                    </p>
+
+                    {/* Info complémentaire pour mauvais voyage */}
+                    {isWrongTrip && (scanModal.details as any)?.tripTitle && (
+                      <div className="mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 font-bold">
+                        🗺️ Voyage associé : {(scanModal.details as any).tripTitle}
+                      </div>
+                    )}
+
+                    {/* Info dossier annulé */}
+                    {isCancelled && (scanModal.details as any)?.bookingRef && (
+                      <div className="mt-2 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-xs text-red-700 dark:text-red-300 font-mono font-bold">
+                        Dossier : {(scanModal.details as any).bookingRef}
+                      </div>
+                    )}
+
+                    {/* Indicator réseau */}
+                    {isNetwork && retryCount > 0 && (
+                      <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                        {retryCount} tentative{retryCount > 1 ? "s" : ""} effectuée{retryCount > 1 ? "s" : ""} automatiquement
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={closeModalAndResume}
+                      className={`w-full py-3 rounded-2xl font-bold text-xs transition active:scale-95 shadow-md ${btnColor}`}
+                    >
+                      {isNoTrip ? "Sélectionner un Voyage" : isNetwork ? "Réessayer la Connexion" : "Reprendre le Scan"}
+                    </button>
+
+                    {/* Bouton saisie manuelle contextuel si QR illisible ou non trouvé */}
+                    {(isNotFound || scanModal.subType === "GENERIC") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeModalAndResume();
+                          setTimeout(() => setIsManualInputOpen(true), 150);
+                        }}
+                        className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700"
+                      >
+                        <Keyboard className="w-3.5 h-3.5" />
+                        Saisir la référence manuellement
+                      </button>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
