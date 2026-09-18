@@ -28,7 +28,6 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
-      checks: process.env.NODE_ENV === "production" ? ["pkce", "state"] : ["none"],
       profile(profile) {
         return {
           id: profile.sub,
