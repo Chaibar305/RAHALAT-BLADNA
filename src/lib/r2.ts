@@ -6,9 +6,9 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-export const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "3f34309d88ce1f243e9b386553f5a920";
-export const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "7ca8a24ccab19c0500c39fc872c8e1c1";
-export const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "68c43e7123c88701b4aaa2be80d26a0be8bf46aaa84c3cd8c1a27ede3bbf287a";
+export const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "";
+export const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
+export const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
 export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "rahalat-bladna";
 export const R2_PUBLIC_DOMAIN = 
   process.env.NEXT_PUBLIC_R2_URL || 

@@ -30,8 +30,7 @@ export default async function middleware(req: NextRequest) {
   if (isAdminRoute || isAccountRoute) {
     const secret =
       process.env.AUTH_SECRET ||
-      process.env.NEXTAUTH_SECRET ||
-      "85i2RnsI5hHS9b0hSllV3rdt/Pwcx6ATi18qdQmEvz4=";
+      process.env.NEXTAUTH_SECRET;
 
     // Récupérer le token de session JWT
     const token = await getToken({

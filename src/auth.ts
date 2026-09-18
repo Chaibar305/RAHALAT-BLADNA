@@ -216,7 +216,7 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "85i2RnsI5hHS9b0hSllV3rdt/Pwcx6ATi18qdQmEvz4=",
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
 };
 
