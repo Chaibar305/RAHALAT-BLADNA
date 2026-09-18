@@ -6,13 +6,17 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-export const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "";
-export const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
-export const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
+export const R2_ACCOUNT_ID =
+  process.env.R2_ACCOUNT_ID || "3f34309d88ce1f243e9b386553f5a920";
+export const R2_ACCESS_KEY_ID =
+  process.env.R2_ACCESS_KEY_ID || "7ca8a24ccab19c0500c39fc872c8e1c1";
+export const R2_SECRET_ACCESS_KEY =
+  process.env.R2_SECRET_ACCESS_KEY ||
+  "68c43e7123c88701b4aaa2be80d26a0be8bf46aaa84c3cd8c1a27ede3bbf287a";
 export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "rahalat-bladna";
-export const R2_PUBLIC_DOMAIN = 
-  process.env.NEXT_PUBLIC_R2_URL || 
-  process.env.R2_PUBLIC_DOMAIN || 
+export const R2_PUBLIC_DOMAIN =
+  process.env.NEXT_PUBLIC_R2_URL ||
+  process.env.R2_PUBLIC_DOMAIN ||
   "https://pub-a7e412da142148a89892728e019eb7e2.r2.dev";
 
 /**
@@ -62,9 +66,10 @@ export async function uploadToR2(
   key: string,
   mimeType: string
 ): Promise<{ url: string; key: string }> {
+  const cleanKey = key.startsWith("/") ? key.substring(1) : key;
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
-    Key: key,
+    Key: cleanKey,
     Body: fileBuffer,
     ContentType: mimeType,
     CacheControl: "public, max-age=31536000, immutable",
@@ -73,8 +78,8 @@ export async function uploadToR2(
   await r2Client.send(command);
 
   return {
-    url: getR2PublicUrl(key),
-    key,
+    url: getR2PublicUrl(cleanKey),
+    key: cleanKey,
   };
 }
 
@@ -110,9 +115,10 @@ export async function getPresignedUploadUrl(
   contentType: string,
   expiresInSeconds: number = 3600
 ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+  const cleanKey = key.startsWith("/") ? key.substring(1) : key;
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
-    Key: key,
+    Key: cleanKey,
     ContentType: contentType,
     CacheControl: "public, max-age=31536000, immutable",
   });
@@ -123,7 +129,7 @@ export async function getPresignedUploadUrl(
 
   return {
     uploadUrl,
-    publicUrl: getR2PublicUrl(key),
-    key,
+    publicUrl: getR2PublicUrl(cleanKey),
+    key: cleanKey,
   };
 }

@@ -25,9 +25,10 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "DEMO_GOOGLE_CLIENT_ID",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "DEMO_GOOGLE_CLIENT_SECRET",
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+      checks: process.env.NODE_ENV === "production" ? ["pkce", "state"] : ["none"],
       profile(profile) {
         return {
           id: profile.sub,
@@ -216,7 +217,11 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  useSecureCookies: process.env.NODE_ENV === "production",
+  secret:
+    process.env.AUTH_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    "85i2RnsI5hHS9b0hSllV3rdt/Pwcx6ATi18qdQmEvz4=",
   debug: process.env.NODE_ENV === "development",
 };
 
