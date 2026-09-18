@@ -151,194 +151,242 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
   }, [selectedTripId, loadTripData]);
 
-  // Arrêt complet du flux caméra et du décodage
-  const stopCamera = useCallback(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // CAMÉRA — Toutes les fonctions sont des refs stables pour éviter les
+  // dépendances circulaires useCallback → useEffect → re-render → boucle infinie
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── stopCamera ─────────────────────────────────────────────────────────────
+  const stopCameraRef = useRef<() => void>(() => {});
+  stopCameraRef.current = () => {
     isScanningRef.current = false;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
     }
     if (zxingReaderRef.current) {
-      try {
-        zxingReaderRef.current.reset();
-      } catch {}
+      try { zxingReaderRef.current.reset(); } catch {}
       zxingReaderRef.current = null;
     }
     if (currentStreamRef.current) {
-      try {
-        currentStreamRef.current.getTracks().forEach((track) => track.stop());
-      } catch {}
+      try { currentStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
       currentStreamRef.current = null;
     }
     if (videoRef.current) {
-      try {
-        videoRef.current.srcObject = null;
-      } catch {}
+      try { videoRef.current.srcObject = null; } catch {}
     }
     setIsScannerRunning(false);
     setIsTorchOn(false);
-  }, []);
+  };
+  const stopCamera = useCallback(() => stopCameraRef.current(), []);
 
-  // Détection en boucle continue des QR Codes
-  const startScanningLoop = useCallback((video: HTMLVideoElement) => {
+  // ── startScanningLoop ─────────────────────────────────────────────────────
+  const startScanningLoopRef = useRef<(video: HTMLVideoElement) => void>(() => {});
+  startScanningLoopRef.current = (video: HTMLVideoElement) => {
     isScanningRef.current = true;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
     }
     if (zxingReaderRef.current) {
-      try {
-        zxingReaderRef.current.reset();
-      } catch {}
+      try { zxingReaderRef.current.reset(); } catch {};
       zxingReaderRef.current = null;
     }
 
-    // Approche A : BarcodeDetector natif haute performance (Android Chrome, iOS 17+, Edge)
+    // ─── Approche A : BarcodeDetector natif ────────────────────────────────
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+      let detector: any = null;
       try {
-        const barcodeDetector = new (window as any).BarcodeDetector({
-          formats: ["qr_code", "code_128", "code_39"],
-        });
+        detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+      } catch { detector = null; }
 
+      if (detector) {
         detectionIntervalRef.current = setInterval(async () => {
-          if (!isScanningRef.current || isProcessingRef.current || !video || video.readyState < 2) return;
+          if (!isScanningRef.current || isProcessingRef.current) return;
+          if (!video || video.readyState < 2 || video.videoWidth === 0) return;
           try {
-            const barcodes = await barcodeDetector.detect(video);
-            if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
-              const code = barcodes[0].rawValue.trim();
-              if (code && isScanningRef.current && !isProcessingRef.current) {
-                handleDetectedCodeRef.current?.(code);
+            const barcodes = await detector.detect(video);
+            if (barcodes?.length > 0) {
+              const raw = barcodes[0]?.rawValue?.trim();
+              if (raw && isScanningRef.current && !isProcessingRef.current) {
+                handleDetectedCodeRef.current?.(raw);
               }
             }
-          } catch {
-            // Frame ignorable
-          }
-        }, 150);
+          } catch { /* frame ignorée */ }
+        }, 120);
         return;
-      } catch (e) {
-        console.warn("BarcodeDetector fallback vers ZXing :", e);
       }
     }
 
-    // Approche B : Moteur ZXing universel
-    try {
-      const ZXing = require("html5-qrcode/third_party/zxing-js.umd.js");
-      const codeReader = new ZXing.BrowserMultiFormatReader();
-      zxingReaderRef.current = codeReader;
+    // ─── Approche B : Canvas + jsQR (universel — iOS Safari, Firefox, etc.) ─
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) { console.warn("Canvas 2D indisponible"); return; }
 
-      codeReader.decodeFromVideoElementContinuously(video, (result: any) => {
-        if (result && isScanningRef.current && !isProcessingRef.current) {
-          const text = result.getText ? result.getText() : String(result);
-          if (text && text.trim()) {
-            handleDetectedCodeRef.current?.(text.trim());
-          }
-        }
-      });
-    } catch (zxingErr) {
-      console.warn("Erreur démarrage décodeur ZXing :", zxingErr);
-    }
-  }, []);
-
-  // Attachement du flux vidéo et lecture playsInline
-  const attachStreamToVideo = useCallback(
-    (stream: MediaStream) => {
-      currentStreamRef.current = stream;
-      const video = videoRef.current;
-      if (!video) return;
-
-      video.srcObject = stream;
-      video.setAttribute("playsinline", "true");
-
-      // Vérifier support flash / torche
+    detectionIntervalRef.current = setInterval(async () => {
+      if (!isScanningRef.current || isProcessingRef.current) return;
+      if (!video || video.readyState < 2 || video.videoWidth === 0) return;
       try {
-        const track = stream.getVideoTracks()[0];
-        if (track && typeof track.getCapabilities === "function") {
-          const caps: any = track.getCapabilities();
-          setIsTorchSupported(!!caps.torch);
-        } else {
-          setIsTorchSupported(false);
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const jsQR = (await import("jsqr")).default;
+        const result = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+        if (result?.data && isScanningRef.current && !isProcessingRef.current) {
+          handleDetectedCodeRef.current?.(result.data.trim());
         }
-      } catch {
+      } catch { /* frame ignorée */ }
+    }, 180);
+  };
+  const startScanningLoop = useCallback((video: HTMLVideoElement) => startScanningLoopRef.current(video), []);
+
+  // ── attachStreamToVideo ────────────────────────────────────────────────────
+  const attachStreamToVideoRef = useRef<(stream: MediaStream) => void>(() => {});
+  attachStreamToVideoRef.current = (stream: MediaStream) => {
+    currentStreamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+
+    // Vérifier support torche
+    try {
+      const track = stream.getVideoTracks()[0];
+      if (track && typeof track.getCapabilities === "function") {
+        const caps: any = track.getCapabilities();
+        setIsTorchSupported(!!caps.torch);
+      } else {
         setIsTorchSupported(false);
       }
+    } catch {
+      setIsTorchSupported(false);
+    }
 
-      video
-        .play()
-        .then(() => {
-          setIsScannerRunning(true);
-          setCameraError(null);
-          startScanningLoop(video);
-        })
-        .catch((err) => {
-          console.warn("Video autoplay avertissement :", err);
-          setIsScannerRunning(true);
-          setCameraError(null);
-          startScanningLoop(video);
-        });
-
-      // Énumération des caméras disponibles (une fois la permission accordée)
-      if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
-        navigator.mediaDevices
-          .enumerateDevices()
-          .then((devices) => {
-            const videoDevices = devices.filter((d) => d.kind === "videoinput");
-            setAvailableCameras(videoDevices);
-          })
-          .catch(() => {});
-      }
-    },
-    [startScanningLoop]
-  );
-
-  // Gestion souple de getUserMedia avec repli (Exactement selon les spécifications)
-  const startCamera = useCallback(
-    async (preferredCameraId?: string, preferredFacing?: "environment" | "user") => {
-      stopCamera();
+    const onPlaying = () => {
+      setIsScannerRunning(true);
       setCameraError(null);
+      startScanningLoopRef.current(video);
+      video.removeEventListener("playing", onPlaying);
+    };
 
-      const targetFacing = preferredFacing || facingMode;
+    video.addEventListener("playing", onPlaying);
 
+    video.play().catch((err) => {
+      console.warn("Video play() avertissement :", err);
+      // Sur iOS le play peut échouer en silence — on force quand même le scan
+      setIsScannerRunning(true);
+      setCameraError(null);
+      startScanningLoopRef.current(video);
+    });
+
+    // Énumération des caméras disponibles (après permission accordée)
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const videoDevices = devices.filter((d) => d.kind === "videoinput");
+          setAvailableCameras(videoDevices);
+        })
+        .catch(() => {});
+    }
+  };
+  const attachStreamToVideo = useCallback((stream: MediaStream) => attachStreamToVideoRef.current(stream), []);
+
+  // ── startCamera ────────────────────────────────────────────────────────────
+  const startCameraRef = useRef<(preferredCameraId?: string, preferredFacing?: "environment" | "user") => Promise<void>>(async () => {});
+  startCameraRef.current = async (preferredCameraId?: string, preferredFacing?: "environment" | "user") => {
+    stopCameraRef.current();
+    setCameraError(null);
+
+    const targetFacing = preferredFacing || facingMode;
+
+    try {
+      // Tentative 1 : contrainte souple (facingMode ou deviceId spécifique)
+      const videoConstraints: MediaTrackConstraints = preferredCameraId
+        ? { deviceId: { exact: preferredCameraId } }
+        : {
+            facingMode: { ideal: targetFacing },
+            width:  { ideal: 1280 },
+            height: { ideal: 720 },
+          };
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: false,
+      });
+      attachStreamToVideoRef.current(stream);
+    } catch (err: any) {
+      console.warn("Tentative idéale échouée, repli sans contrainte…", err);
       try {
-        // Tentative 1 : Caméra arrière mobile avec contrainte souple
-        const videoConstraints: MediaTrackConstraints = preferredCameraId
-          ? { deviceId: { exact: preferredCameraId } }
-          : {
-              facingMode: { ideal: targetFacing },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            };
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
+        // Tentative 2 : repli universel sans contrainte
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
           audio: false,
         });
-        attachStreamToVideo(stream);
-      } catch (err: any) {
-        console.warn("Tentative idéale échouée, essai avec n'importe quelle caméra disponible...", err);
-        try {
-          // Tentative 2 : Repli universel sans contrainte
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
-          attachStreamToVideo(fallbackStream);
-        } catch (finalError: any) {
-          console.error("Accès caméra impossible :", finalError);
-          setIsScannerRunning(false);
-          if (finalError.name === "NotAllowedError" || finalError.name === "PermissionDeniedError") {
-            setCameraError("Permission caméra refusée. Cliquez sur l'icône à gauche du lien rahalatbladna.ma pour autoriser l'appareil photo.");
-          } else if (finalError.name === "NotFoundError") {
-            setCameraError("Aucune caméra physique détectée.");
-          } else {
-            setCameraError("Impossible d'accéder à la caméra (" + finalError.name + "). Vérifiez les autorisations de votre téléphone.");
-          }
+        attachStreamToVideoRef.current(fallbackStream);
+      } catch (finalError: any) {
+        console.error("Accès caméra impossible :", finalError);
+        setIsScannerRunning(false);
+        if (finalError.name === "NotAllowedError" || finalError.name === "PermissionDeniedError") {
+          setCameraError("Permission caméra refusée. Appuyez sur l'icône 🔒 dans la barre d'adresse pour autoriser l'appareil photo.");
+        } else if (finalError.name === "NotFoundError") {
+          setCameraError("Aucune caméra physique détectée sur cet appareil.");
+        } else if (finalError.name === "NotReadableError" || finalError.name === "TrackStartError") {
+          setCameraError("La caméra est déjà utilisée par une autre application. Fermez les autres apps et réessayez.");
+        } else {
+          setCameraError("Impossible d'accéder à la caméra (" + finalError.name + "). Vérifiez les autorisations.");
         }
       }
-    },
-    [stopCamera, attachStreamToVideo, facingMode]
+    }
+  };
+  const startCamera = useCallback(
+    (preferredCameraId?: string, preferredFacing?: "environment" | "user") =>
+      startCameraRef.current(preferredCameraId, preferredFacing),
+    []
   );
 
+  // ── Basculement entre caméras ──────────────────────────────────────────────
+  const switchCamera = async (targetCameraId?: string) => {
+    stopCameraRef.current();
+    if (targetCameraId) {
+      setSelectedCameraId(targetCameraId);
+      selectedCameraIdRef.current = targetCameraId;
+      await startCameraRef.current(targetCameraId);
+      return;
+    }
+    if (availableCameras.length > 1) {
+      const currentId = selectedCameraIdRef.current || selectedCameraId;
+      const currentIndex = availableCameras.findIndex((cam) => cam.deviceId === currentId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      const nextCamera = availableCameras[nextIndex];
+      setSelectedCameraId(nextCamera.deviceId);
+      selectedCameraIdRef.current = nextCamera.deviceId;
+      await startCameraRef.current(nextCamera.deviceId);
+    } else {
+      const nextMode = facingMode === "environment" ? "user" : "environment";
+      setFacingMode(nextMode);
+      await startCameraRef.current(undefined, nextMode);
+    }
+  };
+
+  const toggleTorch = async () => {
+    if (!currentStreamRef.current || !isTorchSupported) return;
+    try {
+      const track = currentStreamRef.current.getVideoTracks()[0];
+      const newState = !isTorchOn;
+      await track.applyConstraints({ advanced: [{ torch: newState } as any] });
+      setIsTorchOn(newState);
+    } catch (e) {
+      console.warn("Torch toggle error:", e);
+    }
+  };
+
   // Détection du QR Code
+
   const handleDetectedCode = async (rawCode: string) => {
     if (isProcessingRef.current || scanModal) return;
     isProcessingRef.current = true;
@@ -511,8 +559,7 @@ Vérifiez le circuit sélectionné.`,
       });
     }, 1000);
   };
-
-  // Fermer la modale et reprendre le scan
+  // Fermer la modale et reprendre le scan (utilise les refs stables)
   const closeModalAndResume = () => {
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
@@ -523,56 +570,14 @@ Vérifiez le circuit sélectionné.`,
     isScanningRef.current = true;
 
     if (videoRef.current && currentStreamRef.current && currentStreamRef.current.active) {
-      startScanningLoop(videoRef.current);
+      startScanningLoopRef.current(videoRef.current);
     } else {
-      startCamera();
-    }
-  };
-
-  // Bascule torche / flash
-  const toggleTorch = async () => {
-    if (!currentStreamRef.current || !isTorchSupported) return;
-    try {
-      const track = currentStreamRef.current.getVideoTracks()[0];
-      if (track) {
-        const newState = !isTorchOn;
-        await (track as any).applyConstraints({
-          advanced: [{ torch: newState }],
-        });
-        setIsTorchOn(newState);
-      }
-    } catch (err) {
-      console.warn("Torch error:", err);
+      startCameraRef.current();
     }
   };
 
   // Bascule caméra avant / arrière / multi-objectifs
-  const switchCamera = async (targetCameraId?: string) => {
-    stopCamera();
 
-    if (targetCameraId) {
-      setSelectedCameraId(targetCameraId);
-      selectedCameraIdRef.current = targetCameraId;
-      await startCamera(targetCameraId);
-      return;
-    }
-
-    if (availableCameras.length > 1) {
-      const currentId = selectedCameraIdRef.current || selectedCameraId;
-      const currentIndex = availableCameras.findIndex((cam) => cam.deviceId === currentId);
-      const nextIndex = (currentIndex + 1) % availableCameras.length;
-      const nextCamera = availableCameras[nextIndex];
-      setSelectedCameraId(nextCamera.deviceId);
-      selectedCameraIdRef.current = nextCamera.deviceId;
-      await startCamera(nextCamera.deviceId);
-    } else {
-      const nextMode = facingMode === "environment" ? "user" : "environment";
-      setFacingMode(nextMode);
-      await startCamera(undefined, nextMode);
-    }
-  };
-
-  const switchCameraFacing = () => switchCamera();
 
   // Soumission manuelle
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -634,15 +639,17 @@ Vérifiez le circuit sélectionné.`,
     }
   };
 
-  // Démarrage initial de la caméra sur mobile
+  // Démarrage initial de la caméra au montage — deps [] pour ne jamais relancer
   useEffect(() => {
-    startCamera().catch((e) => console.error("Initial startCamera error:", e));
-
+    startCameraRef.current();
     return () => {
-      stopCamera();
+      stopCameraRef.current();
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
-  }, [startCamera, stopCamera]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
   const selectedTripObj = initialTrips.find((t) => t.id === selectedTripId);
   const progressPercent = stats.totalPassengers > 0 
