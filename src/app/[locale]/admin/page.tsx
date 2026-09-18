@@ -1,10 +1,12 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import React from "react";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { 
-  TrendingUp, Users, CalendarCheck, ShieldCheck, 
-  FileText, Ticket, ArrowUpRight, CheckCircle2, 
-  Clock, AlertTriangle, Bus, Sparkles, Compass 
+  TrendingUp, Users, Ticket, ArrowUpRight, 
+  Clock, Bus, Compass 
 } from "lucide-react";
 import { formatMAD } from "@/lib/utils";
 import { requireAdminSession } from "@/lib/adminAuth";
@@ -20,74 +22,190 @@ export default async function AdminDashboardPage({
   const t = await getTranslations({ locale, namespace: "admin" });
   const isAr = locale === "ar";
 
-  // 1. Indicateurs Réels calculés via Prisma ORM
+  // 1. Indicateurs Réels calculés via Prisma ORM avec comptabilité stricte
   let totalRevenue = 0;
   let totalDeposits = 0;
   let confirmedBookingsCount = 0;
   let totalTravelersCount = 0;
   let activeTripsCount = 0;
-  let pendingPaymentsCount = 0;
+  let pendingActionsCount = 0;
   let recentBookings: any[] = [];
 
   try {
-    const revenueAgg = await prisma.payment.aggregate({
+    // A. Chiffre d'affaires encaissé : Somme des paiements vérifiés sur les dossiers confirmés
+    const verifiedPaymentsAgg = await prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { status: PaymentStatus.VERIFIED },
+      where: {
+        status: PaymentStatus.VERIFIED,
+        booking: {
+          status: {
+            in: [
+              BookingStatus.DEPOSIT_PAID,
+              BookingStatus.FULLY_PAID,
+              "DEPOSIT_CONFIRMED" as any,
+              "CONFIRMEE" as any,
+            ],
+          },
+        },
+      },
     });
-    totalRevenue = Number(revenueAgg._sum?.amount || 0);
+    totalRevenue = Number(verifiedPaymentsAgg._sum?.amount || 0);
 
+    // B. Acomptes vérifiés spécifiquement
     const depositsAgg = await prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { type: "ACOMPTE", status: PaymentStatus.VERIFIED },
+      where: {
+        type: "ACOMPTE",
+        status: PaymentStatus.VERIFIED,
+        booking: {
+          status: {
+            in: [
+              BookingStatus.DEPOSIT_PAID,
+              BookingStatus.FULLY_PAID,
+              "DEPOSIT_CONFIRMED" as any,
+              "CONFIRMEE" as any,
+            ],
+          },
+        },
+      },
     });
     totalDeposits = Number(depositsAgg._sum?.amount || 0);
 
+    // Fallback de cohérence : si aucun enregistrement Payment individuel, lire depuis Booking.depositPaid / amountPaid des dossiers confirmés
+    if (totalRevenue === 0) {
+      const bookingRevenueAgg = await prisma.booking.aggregate({
+        _sum: { depositPaid: true, amountPaid: true },
+        where: {
+          status: {
+            in: [
+              BookingStatus.DEPOSIT_PAID,
+              BookingStatus.FULLY_PAID,
+              "DEPOSIT_CONFIRMED" as any,
+              "CONFIRMEE" as any,
+            ],
+          },
+        },
+      });
+      const sumDeposit = Number(bookingRevenueAgg._sum?.depositPaid || 0);
+      const sumAmount = Number(bookingRevenueAgg._sum?.amountPaid || 0);
+      totalRevenue = Math.max(sumDeposit, sumAmount);
+    }
+
+    if (totalDeposits === 0) {
+      const bookingDepositAgg = await prisma.booking.aggregate({
+        _sum: { depositPaid: true, amountPaid: true },
+        where: {
+          status: {
+            in: [BookingStatus.DEPOSIT_PAID, "DEPOSIT_CONFIRMED" as any],
+          },
+        },
+      });
+      const sumDeposit = Number(bookingDepositAgg._sum?.depositPaid || 0);
+      const sumAmount = Number(bookingDepositAgg._sum?.amountPaid || 0);
+      totalDeposits = Math.max(sumDeposit, sumAmount);
+    }
+
+    // C. Dossiers confirmés (acompte ou solde validé)
     confirmedBookingsCount = await prisma.booking.count({
       where: {
-        status: { in: [BookingStatus.DEPOSIT_PAID, BookingStatus.FULLY_PAID, "DEPOSIT_CONFIRMED" as any, "CONFIRMEE" as any] },
-      },
-    });
-
-    totalTravelersCount = await prisma.traveler.count({
-      where: {
-        booking: {
-          status: { in: [BookingStatus.DEPOSIT_PAID, BookingStatus.FULLY_PAID, "DEPOSIT_CONFIRMED" as any, "CONFIRMEE" as any] },
+        status: {
+          in: [
+            BookingStatus.DEPOSIT_PAID,
+            BookingStatus.FULLY_PAID,
+            "DEPOSIT_CONFIRMED" as any,
+            "CONFIRMEE" as any,
+          ],
         },
       },
     });
 
+    // D. Voyageurs confirmés
+    totalTravelersCount = await prisma.traveler.count({
+      where: {
+        booking: {
+          status: {
+            in: [
+              BookingStatus.DEPOSIT_PAID,
+              BookingStatus.FULLY_PAID,
+              "DEPOSIT_CONFIRMED" as any,
+              "CONFIRMEE" as any,
+            ],
+          },
+        },
+      },
+    });
+
+    // E. Circuits actifs
     activeTripsCount = await prisma.trip.count({
       where: { isActive: true },
     });
 
-    pendingPaymentsCount = await prisma.payment.count({
-      where: { status: PaymentStatus.PENDING },
+    // F. Actions administratives requises (reçus téléversés à vérifier)
+    const pendingBookingsCount = await prisma.booking.count({
+      where: {
+        status: BookingStatus.PENDING_VERIFICATION,
+        paymentStatus: { in: [PaymentStatus.PENDING, "PENDING" as any] },
+      },
     });
 
+    const pendingPaymentsCount = await prisma.payment.count({
+      where: {
+        status: PaymentStatus.PENDING,
+        booking: {
+          status: {
+            notIn: [
+              BookingStatus.CANCELLED_BY_CLIENT,
+              BookingStatus.CANCELLED_BY_ADMIN,
+              "CANCELLED" as any,
+              "ANNULEE" as any,
+            ],
+          },
+          paymentStatus: {
+            not: PaymentStatus.REJECTED,
+          },
+        },
+      },
+    });
+
+    pendingActionsCount = Math.max(pendingBookingsCount, pendingPaymentsCount);
+
+    // G. Derniers dossiers de réservation
     const dbBookings = await prisma.booking.findMany({
-      take: 6,
+      take: 8,
       orderBy: { createdAt: "desc" },
       include: {
         user: true,
         trip: true,
         travelers: true,
         departureDate: true,
+        payments: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
-    recentBookings = dbBookings.map((b) => ({
-      id: b.id,
-      reference: b.reference,
-      client: b.user?.fullName || b.user?.name || "Client",
-      cin: b.user?.cinOrPassport || "N/A",
-      trip: isAr && b.trip?.titleAr ? b.trip.titleAr : b.trip?.titleFr || "Circuit Organisé",
-      passengers: b.travelers.length || 1,
-      total: Number(b.totalAmount),
-      paid: Number(b.amountPaid),
-      status: b.status,
-      paymentStatus: b.paymentStatus,
-      date: new Date(b.createdAt).toLocaleDateString("fr-FR"),
-    }));
+    recentBookings = dbBookings.map((b) => {
+      const total = Number(b.totalAmount || 0);
+      const paid = Number(b.depositPaid ?? b.amountPaid ?? 0);
+      const balance = Math.max(0, total - paid);
+      const latestPayment = b.payments?.[0];
+
+      return {
+        id: b.id,
+        reference: b.reference,
+        client: b.user?.fullName || b.user?.name || "Client",
+        cin: b.user?.cinOrPassport || "N/A",
+        trip: isAr && b.trip?.titleAr ? b.trip.titleAr : b.trip?.titleFr || "Circuit Organisé",
+        passengers: b.travelers.length || 1,
+        total,
+        paid,
+        balance,
+        status: b.status,
+        paymentStatus: b.paymentStatus,
+        latestPaymentStatus: latestPayment?.status,
+        date: new Date(b.createdAt).toLocaleDateString("fr-FR"),
+      };
+    });
   } catch (error) {
     console.error("Erreur récupération métriques Dashboard:", error);
   }
@@ -96,7 +214,7 @@ export default async function AdminDashboardPage({
     {
       title: isAr ? "إجمالي المداخيل المحصلة" : "Chiffre d'Affaires Encaissé",
       value: totalRevenue > 0 ? formatMAD(totalRevenue, locale) : "0 MAD",
-      subtitle: totalDeposits > 0 ? `${formatMAD(totalDeposits, locale)} d'acomptes` : isAr ? "لا توجد تسبيقات بعد" : "Aucun acompte",
+      subtitle: totalDeposits > 0 ? `${formatMAD(totalDeposits, locale)} d'acomptes` : isAr ? "لا توجد تسبيقات بعد" : "Aucun acompte encaissé",
       isPositive: totalRevenue > 0,
       icon: TrendingUp,
       accent: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -104,10 +222,10 @@ export default async function AdminDashboardPage({
     {
       title: isAr ? "عدد المسافرين المؤكدين" : "Voyageurs Embarqués",
       value: `${totalTravelersCount} ${isAr ? "مسافر" : "Voyageurs"}`,
-      subtitle: `${confirmedBookingsCount} ${isAr ? "حجوزات مؤكدة" : "réservations confirmées"}`,
+      subtitle: `${confirmedBookingsCount} ${isAr ? "حجوزات مؤكدة" : "dossiers confirmés"}`,
       isPositive: totalTravelersCount > 0,
       icon: Users,
-      accent: "text-tp-cyan bg-tp-cyan/10 border-tp-cyan/20",
+      accent: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
     },
     {
       title: isAr ? "الرحلات النشطة المنشورة" : "Circuits Actifs",
@@ -118,21 +236,110 @@ export default async function AdminDashboardPage({
       accent: "text-amber-400 bg-amber-500/10 border-amber-500/20",
     },
     {
-      title: isAr ? "عمليات دفع بانتظار التحقق" : "Paiements à Valider",
-      value: `${pendingPaymentsCount} ${isAr ? "معاملات" : "Transactions"}`,
-      subtitle: pendingPaymentsCount > 0 ? (isAr ? "يتطلب المراجعة" : "Action requise") : (isAr ? "الكل مدقق" : "Tout est à jour"),
-      isPositive: pendingPaymentsCount === 0,
+      title: isAr ? "عمليات دفع بانتظار التحقق" : "Reçus à Vérifier",
+      value: `${pendingActionsCount} ${isAr ? "معاملات" : "Dossiers"}`,
+      subtitle: pendingActionsCount > 0 ? (isAr ? "يتطلب المراجعة" : "Validation requise") : (isAr ? "الكل مدقق" : "Comptabilité à jour"),
+      isPositive: pendingActionsCount === 0,
       icon: Clock,
-      accent: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+      accent: pendingActionsCount > 0 ? "text-amber-500 bg-amber-500/10 border-amber-500/30 animate-pulse" : "text-blue-400 bg-blue-500/10 border-blue-500/20",
     },
   ];
+
+  // Helper pour afficher le badge de statut réel et exact
+  const renderStatusBadge = (b: any) => {
+    const isRejected =
+      b.paymentStatus === PaymentStatus.REJECTED ||
+      b.latestPaymentStatus === PaymentStatus.REJECTED;
+
+    const isCancelledClient = b.status === BookingStatus.CANCELLED_BY_CLIENT;
+    const isCancelledAdmin =
+      b.status === BookingStatus.CANCELLED_BY_ADMIN ||
+      b.status === "CANCELLED" ||
+      b.status === "ANNULEE";
+
+    const isSoldOut =
+      !isRejected &&
+      !isCancelledClient &&
+      !isCancelledAdmin &&
+      (b.status === BookingStatus.FULLY_PAID ||
+        b.paymentStatus === "PAYE_INTEGRALEMENT" ||
+        (b.paid >= b.total && b.total > 0));
+
+    const isDepositValid =
+      !isRejected &&
+      !isCancelledClient &&
+      !isCancelledAdmin &&
+      !isSoldOut &&
+      (b.status === BookingStatus.DEPOSIT_PAID ||
+        b.status === "DEPOSIT_CONFIRMED" ||
+        b.paymentStatus === "ACOMPTE_VERSE" ||
+        b.paid > 0);
+
+    const isPendingReview =
+      !isRejected &&
+      !isCancelledClient &&
+      !isCancelledAdmin &&
+      !isSoldOut &&
+      !isDepositValid &&
+      (b.status === BookingStatus.PENDING_VERIFICATION ||
+        b.paymentStatus === PaymentStatus.PENDING ||
+        b.latestPaymentStatus === PaymentStatus.PENDING);
+
+    if (isCancelledClient) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          {isAr ? "ملغى من العميل" : "Annulé Client"}
+        </span>
+      );
+    }
+    if (isCancelledAdmin) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          {isAr ? "ملغى من الوكالة" : "Annulé Agence"}
+        </span>
+      );
+    }
+    if (isRejected) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          {isAr ? "وصل مرفوض (0 د.م)" : "Reçu Rejeté (0 MAD)"}
+        </span>
+      );
+    }
+    if (isSoldOut) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+          {isAr ? "مدفوع بالكامل (100%)" : "Soldé 100%"}
+        </span>
+      );
+    }
+    if (isDepositValid) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+          {isAr ? "عربون مؤكد" : "Acompte Validé"}
+        </span>
+      );
+    }
+    if (isPendingReview) {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/40 animate-pulse">
+          {isAr ? "في انتظار التحقق" : "À Vérifier"}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
+        {isAr ? "في انتظار الدفع" : "Non Payé"}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Top Banner */}
       <div className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors">
         <div className="space-y-2 z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-pill bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-wider">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>{isAr ? "المنظومة السحابية متصلة" : "PostgreSQL Supabase Connecté"}</span>
           </div>
@@ -151,7 +358,7 @@ export default async function AdminDashboardPage({
         <div className="flex items-center gap-3 z-10">
           <Link
             href={`/${locale}/admin/trips`}
-            className="px-4 py-2.5 rounded-2xl bg-tp-cyan hover:bg-tp-cyan-hover text-white dark:text-slate-950 font-black text-xs flex items-center gap-2 shadow-tp-cyan transition active:scale-95"
+            className="px-4 py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black text-xs flex items-center gap-2 shadow-sm transition active:scale-95"
           >
             <Compass className="w-4 h-4" />
             <span>{isAr ? "إدارة الرحلات" : "Gérer les Circuits"}</span>
@@ -194,7 +401,7 @@ export default async function AdminDashboardPage({
       <div className="bg-white dark:bg-slate-950 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
         <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Ticket className="w-5 h-5 text-tp-cyan" />
+            <Ticket className="w-5 h-5 text-cyan-500" />
             <h2 className="text-base font-black text-slate-900 dark:text-white">
               {isAr ? "آخر الحجوزات المسجلة بالمنظومة" : "Derniers Dossiers de Réservation"}
             </h2>
@@ -202,7 +409,7 @@ export default async function AdminDashboardPage({
 
           <Link
             href={`/${locale}/admin/bookings`}
-            className="text-xs font-black text-tp-cyan hover:underline flex items-center gap-1"
+            className="text-xs font-black text-cyan-600 hover:underline flex items-center gap-1"
           >
             <span>{isAr ? "عرض كل الحجوزات" : "Voir Tout"}</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -230,7 +437,7 @@ export default async function AdminDashboardPage({
                 {recentBookings.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition">
                     <td className="px-6 py-4">
-                      <p className="font-mono font-black text-tp-cyan-hover dark:text-tp-cyan">{b.reference}</p>
+                      <p className="font-mono font-black text-cyan-600 dark:text-cyan-400">{b.reference}</p>
                       <p className="font-bold text-slate-900 dark:text-white mt-0.5">{b.client}</p>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">CIN: {b.cin}</p>
                     </td>
@@ -238,26 +445,23 @@ export default async function AdminDashboardPage({
                       {b.trip}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="px-2 py-0.5 rounded-pill bg-slate-100 dark:bg-slate-800 font-black text-slate-800 dark:text-white text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-black text-slate-800 dark:text-white text-[11px]">
                         {b.passengers}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-end font-mono">
                       <p className="font-black text-slate-900 dark:text-white">{formatMAD(b.total, locale)}</p>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      <p className={`text-[11px] font-bold ${b.paid > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
                         {isAr ? "المؤدى :" : "Payé :"} {formatMAD(b.paid, locale)}
                       </p>
+                      {b.total - b.paid > 0 && b.status !== BookingStatus.CANCELLED_BY_CLIENT && b.status !== BookingStatus.CANCELLED_BY_ADMIN && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                          {isAr ? "الباقي :" : "Reste :"} {formatMAD(b.balance, locale)}
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-1 rounded-pill text-[10px] font-black uppercase font-mono ${
-                          b.paymentStatus === "PAYE_INTEGRALEMENT"
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                            : "bg-tp-cyan/15 text-tp-cyan-hover dark:text-tp-cyan border border-tp-cyan/30"
-                        }`}
-                      >
-                        {b.paymentStatus === "PAYE_INTEGRALEMENT" ? (isAr ? "مدفوع بالكامل" : "Soldé") : (isAr ? "تسبيق مؤكد" : "Acompte Payé")}
-                      </span>
+                      {renderStatusBadge(b)}
                     </td>
                     <td className="px-6 py-4 text-end text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                       {b.date}

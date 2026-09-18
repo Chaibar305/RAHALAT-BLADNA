@@ -114,23 +114,6 @@ export async function updatePersonalInfoAction(data: UpdatePersonalInfoInput) {
       return { success: false, error: "Compte utilisateur introuvable" };
     }
 
-    // Vérification d'unicité du téléphone si changé
-    if (data.phone.trim() !== user.phone) {
-      const existingPhone = await prisma.user.findFirst({
-        where: {
-          phone: data.phone.trim(),
-          NOT: { id: user.id },
-        },
-      });
-
-      if (existingPhone) {
-        return {
-          success: false,
-          error: "Ce numéro de téléphone est déjà associé à un autre compte.",
-        };
-      }
-    }
-
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -153,6 +136,12 @@ export async function updatePersonalInfoAction(data: UpdatePersonalInfoInput) {
     return { success: true, message: "Coordonnées mises à jour avec succès !" };
   } catch (error: any) {
     console.error("updatePersonalInfoAction error:", error);
+    if (error?.code === "P2002") {
+      return {
+        success: false,
+        error: "Ce numéro ou identifiant est déjà utilisé. / هذا الرقم أو المعرف مستخدم بالفعل.",
+      };
+    }
     return { success: false, error: "Erreur lors de l'enregistrement des coordonnées." };
   }
 }

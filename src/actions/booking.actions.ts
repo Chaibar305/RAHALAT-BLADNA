@@ -6,9 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { CreateBookingSchema, CreateBookingInput } from "@/lib/validations/booking.schema";
 import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
-import { updateBookingAction } from "./admin-bookings";
-
-export { updateBookingAction };
+import { updateBookingAction as updateBookingActionImpl } from "./admin-bookings";
 
 /**
  * Server Action : Création d'une réservation atomique avec Devis et Facture
@@ -309,7 +307,7 @@ export async function validateBookingDepositAction(
 
       // 2. Valider le paiement en attente ou le mettre à jour
       const pendingPayment = booking.payments.find(
-        (p) => p.status === PaymentStatus.PENDING || (p.status as any) === "EN_ATTENTE"
+        (p) => p.status === PaymentStatus.PENDING
       );
       if (pendingPayment) {
         await tx.payment.update({
@@ -401,7 +399,7 @@ export async function validateBookingFullPaymentAction(bookingId: string, notes?
       await tx.payment.updateMany({
         where: {
           bookingId,
-          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+          status: { in: [PaymentStatus.PENDING] },
         },
         data: {
           status: PaymentStatus.VERIFIED,
@@ -451,20 +449,27 @@ export async function rejectBookingReceiptAction(bookingId: string, reason: stri
       return { success: false, error: "Dossier introuvable." };
     }
 
+    const trimmedReason = reason?.trim() || "Reçu non conforme ou illisible";
+
     await prisma.$transaction(async (tx) => {
+      // 1. Mettre à jour la réservation : remise à 0 de depositPaid, statut PENDING_VERIFICATION et motif
       await tx.booking.update({
         where: { id: bookingId },
         data: {
           status: BookingStatus.PENDING_VERIFICATION,
           paymentStatus: PaymentStatus.REJECTED,
-          notes: `${booking.notes ? booking.notes + "\n" : ""}[REJET REÇU ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${reason}`,
+          depositPaid: 0,
+          amountPaid: 0,
+          cancellationReason: trimmedReason,
+          notes: `${booking.notes ? booking.notes + "\n" : ""}[REJET REÇU ${adminName} ${new Date().toLocaleDateString("fr-FR")}]: ${trimmedReason}`,
         },
       });
 
+      // 2. Mettre à jour les paiements en attente (sans valeur EN_ATTENTE qui crash Postgres)
       await tx.payment.updateMany({
         where: {
           bookingId,
-          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+          status: { in: [PaymentStatus.PENDING] },
         },
         data: {
           status: PaymentStatus.REJECTED,
@@ -474,7 +479,9 @@ export async function rejectBookingReceiptAction(bookingId: string, reason: stri
       });
     });
 
+    revalidatePath("/admin");
     revalidatePath("/admin/bookings");
+    revalidatePath("/admin/clients");
     revalidatePath("/mon-compte/reservations");
 
     return { success: true, message: "Preuve de paiement rejetée avec motif." };
@@ -482,6 +489,10 @@ export async function rejectBookingReceiptAction(bookingId: string, reason: stri
     console.error("rejectBookingReceiptAction error:", error);
     return { success: false, error: error.message || "Erreur lors du rejet du reçu." };
   }
+}
+
+export async function rejectPaymentReceiptAction(bookingId: string, reason: string) {
+  return rejectBookingReceiptAction(bookingId, reason);
 }
 
 /**
@@ -524,7 +535,7 @@ export async function cancelBookingAdminAction(bookingId: string, reason?: strin
       await tx.payment.updateMany({
         where: {
           bookingId,
-          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+          status: { in: [PaymentStatus.PENDING] },
         },
         data: {
           status: PaymentStatus.REJECTED,
@@ -667,7 +678,23 @@ export async function updateBookingAdminAction(
     notes?: string;
   }
 ) {
-  return updateBookingAction(bookingId, data);
+  return updateBookingActionImpl(bookingId, data);
+}
+
+export async function updateBookingAction(
+  bookingId: string,
+  data: {
+    status?: string | BookingStatus;
+    financialStatus?: string;
+    paymentStatus?: string | PaymentStatus;
+    totalAmount?: number;
+    depositAmount?: number;
+    depositPaid?: number;
+    amountPaid?: number;
+    notes?: string;
+  }
+) {
+  return updateBookingActionImpl(bookingId, data);
 }
 
 /**

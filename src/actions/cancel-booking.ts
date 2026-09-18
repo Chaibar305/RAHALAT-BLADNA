@@ -109,7 +109,7 @@ export async function cancelBookingAction(
       await tx.payment.updateMany({
         where: {
           bookingId,
-          status: { in: [PaymentStatus.PENDING, "EN_ATTENTE" as any] },
+          status: { in: [PaymentStatus.PENDING] },
         },
         data: {
           status: PaymentStatus.REJECTED,

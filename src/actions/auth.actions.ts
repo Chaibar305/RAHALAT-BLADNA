@@ -50,18 +50,7 @@ export async function registerUserAction(data: {
       };
     }
 
-    // 3. Vérification unicité téléphone
-    const existingByPhone = await prisma.user.findUnique({
-      where: { phone },
-    });
-    if (existingByPhone) {
-      return {
-        success: false,
-        error: "Ce numéro de téléphone est déjà utilisé. Veuillez vous connecter.",
-      };
-    }
-
-    // 4. Hachage du mot de passe (bcrypt, coût 12)
+    // 3. Hachage du mot de passe (bcrypt, coût 12)
     const passwordHash = await bcrypt.hash(data.password, 12);
 
     // 5. Création du compte voyageur

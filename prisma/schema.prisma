@@ -53,7 +53,7 @@ model User {
   avatarUrl         String?
   passwordHash      String?            // Optionnel pour les comptes Google OAuth
   fullName          String?
-  phone             String?            @unique // Ex: +212661000000
+  phone             String?            // Ex: +212661000000 (autorisé en doublon pour familles/proches)
   cinOrPassport     String?            // N° CIN ou Passeport
   city              String?            @default("Casablanca")
   role              UserRole           @default(CLIENT)
