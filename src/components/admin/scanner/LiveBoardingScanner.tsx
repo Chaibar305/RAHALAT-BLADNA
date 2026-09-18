@@ -92,6 +92,8 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const selectedCameraIdRef = useRef<string>('');
   const [isScannerRunning, setIsScannerRunning] = useState(false);
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
+  const [isInsecureContext, setIsInsecureContext] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [isTorchSupported, setIsTorchSupported] = useState(false);
@@ -182,7 +184,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
 
   // ── startScanningLoop ─────────────────────────────────────────────────────
   const startScanningLoopRef = useRef<(video: HTMLVideoElement) => void>(() => {});
-  startScanningLoopRef.current = (video: HTMLVideoElement) => {
+  startScanningLoopRef.current = async (video: HTMLVideoElement) => {
     isScanningRef.current = true;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
@@ -193,7 +195,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
       zxingReaderRef.current = null;
     }
 
-    // ─── Approche A : BarcodeDetector natif ────────────────────────────────
+    // ─── Approche A : BarcodeDetector natif (si supporté par Chrome Android) ──
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
       let detector: any = null;
       try {
@@ -223,23 +225,29 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) { console.warn("Canvas 2D indisponible"); return; }
 
-    detectionIntervalRef.current = setInterval(async () => {
-      if (!isScanningRef.current || isProcessingRef.current) return;
-      if (!video || video.readyState < 2 || video.videoWidth === 0) return;
-      try {
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const jsQR = (await import("jsqr")).default;
-        const result = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-        if (result?.data && isScanningRef.current && !isProcessingRef.current) {
-          handleDetectedCodeRef.current?.(result.data.trim());
-        }
-      } catch { /* frame ignorée */ }
-    }, 180);
+    try {
+      const jsQRModule = await import("jsqr");
+      const jsQR = jsQRModule.default || jsQRModule;
+
+      detectionIntervalRef.current = setInterval(() => {
+        if (!isScanningRef.current || isProcessingRef.current) return;
+        if (!video || video.readyState < 2 || video.videoWidth === 0) return;
+        try {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const result = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+          if (result?.data && isScanningRef.current && !isProcessingRef.current) {
+            handleDetectedCodeRef.current?.(result.data.trim());
+          }
+        } catch { /* frame ignorée */ }
+      }, 140);
+    } catch (e) {
+      console.error("Erreur chargement jsQR :", e);
+    }
   };
   const startScanningLoop = useCallback((video: HTMLVideoElement) => startScanningLoopRef.current(video), []);
 
@@ -248,10 +256,19 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   attachStreamToVideoRef.current = (stream: MediaStream) => {
     currentStreamRef.current = stream;
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      // Si la balise vidéo n'est pas encore prête dans le DOM, différer de 80ms
+      setTimeout(() => {
+        if (videoRef.current && currentStreamRef.current === stream) {
+          attachStreamToVideoRef.current(stream);
+        }
+      }, 80);
+      return;
+    }
 
     video.srcObject = stream;
     video.setAttribute("playsinline", "true");
+    video.muted = true;
 
     // Vérifier support torche
     try {
@@ -268,6 +285,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
 
     const onPlaying = () => {
       setIsScannerRunning(true);
+      setIsCameraStarting(false);
       setCameraError(null);
       startScanningLoopRef.current(video);
       video.removeEventListener("playing", onPlaying);
@@ -277,8 +295,9 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
 
     video.play().catch((err) => {
       console.warn("Video play() avertissement :", err);
-      // Sur iOS le play peut échouer en silence — on force quand même le scan
+      // Sur iOS le play peut nécessiter d'être forcé
       setIsScannerRunning(true);
+      setIsCameraStarting(false);
       setCameraError(null);
       startScanningLoopRef.current(video);
     });
@@ -301,11 +320,37 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   startCameraRef.current = async (preferredCameraId?: string, preferredFacing?: "environment" | "user") => {
     stopCameraRef.current();
     setCameraError(null);
+    setIsCameraStarting(true);
+
+    // 1. Diagnostic de contexte sécurisé (HTTPS / localhost requis pour la caméra sur mobile)
+    if (typeof window !== "undefined" && window.isSecureContext === false) {
+      setIsCameraStarting(false);
+      setIsScannerRunning(false);
+      setIsInsecureContext(true);
+      setCameraError(
+        "Connexion non sécurisée (HTTP) : Les navigateurs bloquent obligatoirement l'accès caméra en HTTP. Utilisez HTTPS ou activez l'exception dans chrome://flags."
+      );
+      return;
+    }
+
+    // 2. Diagnostic de support de l'API mediaDevices
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== "function"
+    ) {
+      setIsCameraStarting(false);
+      setIsScannerRunning(false);
+      setCameraError(
+        "L'API d'accès à la caméra n'est pas disponible sur ce navigateur ou cette connexion."
+      );
+      return;
+    }
 
     const targetFacing = preferredFacing || facingMode;
 
     try {
-      // Tentative 1 : contrainte souple (facingMode ou deviceId spécifique)
+      // Tentative 1 : contrainte souple (caméra arrière 'environment' par défaut)
       const videoConstraints: MediaTrackConstraints = preferredCameraId
         ? { deviceId: { exact: preferredCameraId } }
         : {
@@ -322,7 +367,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     } catch (err: any) {
       console.warn("Tentative idéale échouée, repli sans contrainte…", err);
       try {
-        // Tentative 2 : repli universel sans contrainte
+        // Tentative 2 : repli universel basique sans contrainte
         const fallbackStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -332,14 +377,18 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
         console.error("Accès caméra impossible :", finalError);
         setIsScannerRunning(false);
         if (finalError.name === "NotAllowedError" || finalError.name === "PermissionDeniedError") {
-          setCameraError("Permission caméra refusée. Appuyez sur l'icône 🔒 dans la barre d'adresse pour autoriser l'appareil photo.");
-        } else if (finalError.name === "NotFoundError") {
+          setCameraError("Permission caméra refusée. Appuyez sur l'icône 🔒 dans la barre d'adresse pour autoriser l'appareil photo, puis réessayez.");
+        } else if (finalError.name === "NotFoundError" || finalError.name === "DevicesNotFoundError") {
           setCameraError("Aucune caméra physique détectée sur cet appareil.");
         } else if (finalError.name === "NotReadableError" || finalError.name === "TrackStartError") {
-          setCameraError("La caméra est déjà utilisée par une autre application. Fermez les autres apps et réessayez.");
+          setCameraError("La caméra est déjà utilisée par une autre application ou un autre onglet. Fermez-les et réessayez.");
+        } else if (finalError.name === "SecurityError") {
+          setCameraError("Accès bloqué par la politique de sécurité du navigateur (Permissions-Policy ou iframe).");
         } else {
-          setCameraError("Impossible d'accéder à la caméra (" + finalError.name + "). Vérifiez les autorisations.");
+          setCameraError("Impossible d'accéder à la caméra (" + (finalError.name || finalError.message || "Erreur inconnue") + "). Vérifiez les autorisations.");
         }
+      } finally {
+        setIsCameraStarting(false);
       }
     }
   };
@@ -818,25 +867,60 @@ Vérifiez le circuit sélectionné.`,
             </div>
           </div>
 
-          {/* Message si caméra en chargement ou erreur */}
+          {/* Message si caméra en chargement, arrêtée ou erreur */}
           {!isScannerRunning && (
             <div className="absolute inset-0 bg-white/95 dark:bg-slate-950/95 z-20 flex flex-col items-center justify-center p-6 text-center space-y-3">
               {cameraError ? (
-                <>
-                  <CameraOff className="w-10 h-10 text-red-500" />
-                  <p className="text-xs text-red-600 dark:text-red-300 font-bold max-w-xs">{cameraError}</p>
+                <div className="space-y-3 max-w-xs flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-500 shadow-sm">
+                    <CameraOff className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs text-red-600 dark:text-red-400 font-bold leading-relaxed">{cameraError}</p>
+                  
+                  {isInsecureContext && (
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 text-left space-y-1">
+                      <p className="font-bold">📱 Test sur mobile via Wi-Fi :</p>
+                      <p className="leading-snug">
+                        Chrome bloque la caméra en HTTP. Allez sur <code className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded font-mono text-[10px]">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, ajoutez l&apos;URL HTTP de ce PC, cochez &apos;Enabled&apos; et relancez Chrome.
+                      </p>
+                    </div>
+                  )}
+
                   <button
+                    type="button"
                     onClick={() => startCamera()}
-                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold transition shadow-sm"
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold transition shadow-sm active:scale-95 flex items-center gap-1.5"
                   >
+                    <RefreshCw className="w-3.5 h-3.5" />
                     Réessayer
                   </button>
-                </>
-              ) : (
-                <>
+                </div>
+              ) : isCameraStarting ? (
+                <div className="space-y-2 flex flex-col items-center max-w-xs">
                   <Loader2 className="w-8 h-8 text-cyan-500 dark:text-tp-cyan animate-spin" />
-                  <p className="text-xs text-slate-600 dark:text-slate-300 font-bold">Initialisation de la caméra...</p>
-                </>
+                  <p className="text-xs text-slate-800 dark:text-slate-200 font-bold">Demande d&apos;accès à la caméra...</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Veuillez cliquer sur <strong>Autoriser</strong> dans la notification de votre navigateur.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 flex flex-col items-center">
+                  <div className="w-14 h-14 rounded-2xl bg-cyan-100 dark:bg-tp-cyan/20 flex items-center justify-center text-cyan-600 dark:text-tp-cyan shadow-sm">
+                    <Camera className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Prêt à scanner</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Appuyez ci-dessous pour ouvrir l&apos;appareil photo</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => startCamera()}
+                    className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-black transition shadow-md shadow-cyan-600/25 active:scale-95 flex items-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Ouvrir la caméra
+                  </button>
+                </div>
               )}
             </div>
           )}

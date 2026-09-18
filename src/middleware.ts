@@ -70,7 +70,7 @@ export default async function middleware(req: NextRequest) {
   response.headers.set("X-XSS-Protection", "1; mode=block");
   response.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=()"
+    "camera=(self), microphone=(), geolocation=(), payment=()"
   );
 
   return response;
