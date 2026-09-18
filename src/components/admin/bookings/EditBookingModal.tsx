@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { X, Edit3, Banknote, Tag, ShieldCheck, Loader2, Save } from "lucide-react";
 import { updateBookingAction } from "@/actions/admin-bookings";
 import { BookingAdminItem } from "./ReceiptVerificationModal";
@@ -22,6 +23,7 @@ export function EditBookingModal({
   onSuccess,
   locale = "fr",
 }: EditBookingModalProps) {
+  const router = useRouter();
   const isAr = locale === "ar";
   const [status, setStatus] = useState<string>(BookingStatus.PENDING_VERIFICATION);
   const [financialStatus, setFinancialStatus] = useState<string>("UNPAID");
@@ -126,6 +128,7 @@ export function EditBookingModal({
       });
 
       if (res.success) {
+        router.refresh();
         if (onSuccess) onSuccess();
         onClose();
       } else {
@@ -200,6 +203,7 @@ export function EditBookingModal({
                 <option value={BookingStatus.FULLY_PAID}>🔵 Soldé 100% (FULLY_PAID)</option>
                 <option value={BookingStatus.CANCELLED_BY_CLIENT}>🔴 Annulée par le client (CANCELLED_BY_CLIENT)</option>
                 <option value={BookingStatus.CANCELLED_BY_ADMIN}>⚪ Annulée par l&apos;agence (CANCELLED_BY_ADMIN)</option>
+                <option value="REJECTED">🚫 Reçu Rejeté (REJECTED)</option>
                 <option value={BookingStatus.PENDING_PAYMENT}>En Attente Paiement (Legacy)</option>
                 <option value={BookingStatus.DEPOSIT_CONFIRMED}>Acompte Confirmé (Legacy)</option>
                 <option value={BookingStatus.CANCELLED}>Annulée (Legacy)</option>

@@ -25,42 +25,30 @@ export async function updateBookingAction(
 
   try {
     const rawPaid = formData.depositPaid ?? formData.amountPaid ?? 0;
-    const isUnpaid =
-      formData.financialStatus === 'UNPAID' ||
-      formData.financialStatus === 'NON_PAYE' ||
-      formData.paymentStatus === 'NON_PAYE' ||
-      Number(rawPaid) === 0;
+    const finalDepositPaid = Math.max(0, Number(rawPaid));
 
-    const finalDepositPaid = isUnpaid ? 0 : Number(rawPaid);
+    // 1. Enregistre fidèlement le status choisi dans le modal
+    const finalStatus = (formData.status || 'PENDING_VERIFICATION') as BookingStatus;
 
-    // Déterminer le statut cohérent
-    let finalStatus = formData.status || 'PENDING_VERIFICATION';
-    if (
-      isUnpaid &&
-      (finalStatus === 'DEPOSIT_PAID' ||
-        finalStatus === 'DEPOSIT_CONFIRMED' ||
-        finalStatus === 'FULLY_PAID')
-    ) {
-      finalStatus = 'PENDING_VERIFICATION';
-    } else if (!isUnpaid && formData.financialStatus === 'FULLY_PAID') {
-      finalStatus = 'FULLY_PAID';
-    } else if (
-      !isUnpaid &&
-      (formData.financialStatus === 'DEPOSIT_PAID' || formData.financialStatus === 'ACOMPTE_VERSE') &&
-      finalStatus === 'PENDING_VERIFICATION'
-    ) {
-      finalStatus = 'DEPOSIT_PAID';
+    // Déterminer le statut de paiement cohérent
+    let finalPaymentStatus: PaymentStatus = PaymentStatus.PENDING;
+    if (finalStatus === ('REJECTED' as any)) {
+      finalPaymentStatus = PaymentStatus.REJECTED;
+    } else if (finalStatus === BookingStatus.FULLY_PAID || finalDepositPaid > 0) {
+      finalPaymentStatus = PaymentStatus.VERIFIED;
+    } else {
+      finalPaymentStatus = PaymentStatus.PENDING;
     }
 
     const adminName = session.user.name || session.user.email || 'Administrateur';
 
     await prisma.$transaction(async (tx) => {
-      // 1. Mettre à jour la réservation
+      // 1. Mettre à jour la réservation avec le status choisi
       const updateData: any = {
-        status: finalStatus as BookingStatus,
+        status: finalStatus,
         depositPaid: finalDepositPaid,
         amountPaid: finalDepositPaid,
-        paymentStatus: isUnpaid ? PaymentStatus.REJECTED : PaymentStatus.VERIFIED,
+        paymentStatus: finalPaymentStatus,
       };
 
       if (formData.notes !== undefined) {
@@ -80,8 +68,47 @@ export async function updateBookingAction(
       });
 
       // 2. Synchroniser la table Payment
-      if (isUnpaid) {
-        // Si non payé : marquer les paiements existants en REJECTED avec montant 0
+      // Si le statut n'est plus REJECTED, réinitialise les éventuels paiements REJECTED associés
+      if (finalStatus !== ('REJECTED' as any)) {
+        await tx.payment.updateMany({
+          where: { bookingId: bookingId, status: PaymentStatus.REJECTED },
+          data: {
+            status: finalDepositPaid > 0 ? PaymentStatus.VERIFIED : PaymentStatus.PENDING,
+            amount: finalDepositPaid > 0 ? finalDepositPaid : 0,
+            verifiedAt: finalDepositPaid > 0 ? new Date() : null,
+            verifiedBy: finalDepositPaid > 0 ? adminName : null,
+          },
+        });
+
+        if (finalDepositPaid > 0) {
+          const existingPayment = await tx.payment.findFirst({
+            where: { bookingId: bookingId },
+          });
+
+          if (existingPayment) {
+            await tx.payment.update({
+              where: { id: existingPayment.id },
+              data: {
+                status: PaymentStatus.VERIFIED,
+                amount: finalDepositPaid,
+                verifiedAt: new Date(),
+                verifiedBy: adminName,
+              },
+            });
+          } else {
+            await tx.payment.create({
+              data: {
+                bookingId: bookingId,
+                amount: finalDepositPaid,
+                status: PaymentStatus.VERIFIED,
+                verifiedAt: new Date(),
+                verifiedBy: adminName,
+              },
+            });
+          }
+        }
+      } else {
+        // Si le statut est explicitement REJECTED : marquer les paiements en REJECTED avec montant 0
         await tx.payment.updateMany({
           where: { bookingId: bookingId },
           data: {
@@ -91,33 +118,6 @@ export async function updateBookingAction(
             verifiedBy: adminName,
           },
         });
-      } else {
-        // Si un acompte ou solde est validé, s'assurer qu'un paiement VERIFIED existe
-        const existingPayment = await tx.payment.findFirst({
-          where: { bookingId: bookingId },
-        });
-
-        if (existingPayment) {
-          await tx.payment.update({
-            where: { id: existingPayment.id },
-            data: {
-              status: PaymentStatus.VERIFIED,
-              amount: finalDepositPaid,
-              verifiedAt: new Date(),
-              verifiedBy: adminName,
-            },
-          });
-        } else {
-          await tx.payment.create({
-            data: {
-              bookingId: bookingId,
-              amount: finalDepositPaid,
-              status: PaymentStatus.VERIFIED,
-              verifiedAt: new Date(),
-              verifiedBy: adminName,
-            },
-          });
-        }
       }
 
       // 3. Synchroniser la facture si existante
@@ -151,8 +151,9 @@ export async function updateBookingAction(
     });
 
     // 4. Revalidation immédiate de tout le portail d'administration
-    revalidatePath('/admin');
+    revalidatePath('/[locale]/admin', 'layout');
     revalidatePath('/admin/bookings');
+    revalidatePath('/admin');
     revalidatePath('/admin/clients');
     revalidatePath('/mon-compte/reservations');
 

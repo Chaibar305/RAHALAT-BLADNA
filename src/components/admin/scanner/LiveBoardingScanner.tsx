@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { 
   Camera, CameraOff, Flashlight, FlashlightOff, RefreshCw, 
   CheckCircle2, AlertTriangle, XCircle, Search, Users, 
@@ -55,20 +54,6 @@ type ScanResultModal =
     }
   | null;
 
-// Helper pour obtenir un flux vidéo temporaire (débloque les labels et l'accès caméra)
-async function getCameraStream(): Promise<MediaStream> {
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Périphérique caméra non supporté par ce navigateur");
-  }
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
-    });
-  } catch {
-    return await navigator.mediaDevices.getUserMedia({ video: true });
-  }
-}
-
 export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOperator }: LiveBoardingScannerProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
@@ -114,7 +99,11 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
   const [drawerSearch, setDrawerSearch] = useState("");
   const [drawerFilter, setDrawerFilter] = useState<"ALL" | "CHECKED" | "PENDING">("ALL");
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const currentStreamRef = useRef<MediaStream | null>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const zxingReaderRef = useRef<any>(null);
+  const isScanningRef = useRef(false);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
   const handleDetectedCodeRef = useRef<((rawCode: string) => Promise<void>) | null>(null);
@@ -146,106 +135,208 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
   }, [selectedTripId, loadTripData]);
 
-  // Initialisation et démarrage du scanner caméra
-  const startCamera = useCallback(
-    async (cameraIdToUse?: string, facingModeToUse?: "environment" | "user") => {
-      setCameraError(null);
-
+  // Arrêt complet du flux caméra et du décodage
+  const stopCamera = useCallback(() => {
+    isScanningRef.current = false;
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    if (zxingReaderRef.current) {
       try {
-        const elementId = "reader-viewport";
-        const container = document.getElementById(elementId);
-        if (!container) return;
-
-        if (scannerRef.current) {
-          try {
-            if (scannerRef.current.isScanning) {
-              await scannerRef.current.stop();
-            }
-            scannerRef.current.clear();
-          } catch {}
-        }
-
-        const html5QrCode = new Html5Qrcode(elementId, {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-          ],
-          verbose: false,
-        });
-
-        scannerRef.current = html5QrCode;
-
-        const config = {
-          fps: 15,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        };
-
-        const targetCameraId = cameraIdToUse ?? (selectedCameraIdRef.current || selectedCameraId);
-        const cameraChoice = targetCameraId ? targetCameraId : { facingMode: facingModeToUse || facingMode };
-
-        await html5QrCode.start(
-          cameraChoice,
-          config,
-          (decodedText) => {
-            handleDetectedCodeRef.current?.(decodedText);
-          },
-          () => {
-            // Erreur frame normale pendant le scan, ignorer
-          }
-        );
-
-        setIsScannerRunning(true);
-
-        // Vérifier support torche / flash
-        try {
-          const capabilities: any = html5QrCode.getRunningTrackCapabilities();
-          if (capabilities && capabilities.torch) {
-            setIsTorchSupported(true);
-          } else {
-            setIsTorchSupported(false);
-          }
-        } catch {
-          setIsTorchSupported(false);
-        }
-      } catch (err: any) {
-        console.warn("Camera start failed:", err);
-        setIsScannerRunning(false);
-        setCameraError(
-          err.name === "NotAllowedError"
-            ? "Permission caméra refusée. Veuillez autoriser l'accès à la caméra dans vos réglages."
-            : "Impossible d'accéder à la caméra de l'appareil."
-        );
-      }
-    },
-    [selectedCameraId, facingMode]
-  );
-
-  const stopCamera = useCallback(async () => {
-    if (scannerRef.current && scannerRef.current.isScanning) {
+        zxingReaderRef.current.reset();
+      } catch {}
+      zxingReaderRef.current = null;
+    }
+    if (currentStreamRef.current) {
       try {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-      } catch (e) {
-        console.warn("Stop camera error:", e);
-      }
+        currentStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {}
+      currentStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      try {
+        videoRef.current.srcObject = null;
+      } catch {}
     }
     setIsScannerRunning(false);
     setIsTorchOn(false);
   }, []);
 
+  // Détection en boucle continue des QR Codes
+  const startScanningLoop = useCallback((video: HTMLVideoElement) => {
+    isScanningRef.current = true;
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    if (zxingReaderRef.current) {
+      try {
+        zxingReaderRef.current.reset();
+      } catch {}
+      zxingReaderRef.current = null;
+    }
+
+    // Approche A : BarcodeDetector natif haute performance (Android Chrome, iOS 17+, Edge)
+    if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+      try {
+        const barcodeDetector = new (window as any).BarcodeDetector({
+          formats: ["qr_code", "code_128", "code_39"],
+        });
+
+        detectionIntervalRef.current = setInterval(async () => {
+          if (!isScanningRef.current || isProcessingRef.current || !video || video.readyState < 2) return;
+          try {
+            const barcodes = await barcodeDetector.detect(video);
+            if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
+              const code = barcodes[0].rawValue.trim();
+              if (code && isScanningRef.current && !isProcessingRef.current) {
+                handleDetectedCodeRef.current?.(code);
+              }
+            }
+          } catch {
+            // Frame ignorable
+          }
+        }, 150);
+        return;
+      } catch (e) {
+        console.warn("BarcodeDetector fallback vers ZXing :", e);
+      }
+    }
+
+    // Approche B : Moteur ZXing universel
+    try {
+      const ZXing = require("html5-qrcode/third_party/zxing-js.umd.js");
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      zxingReaderRef.current = codeReader;
+
+      codeReader.decodeFromVideoElementContinuously(video, (result: any) => {
+        if (result && isScanningRef.current && !isProcessingRef.current) {
+          const text = result.getText ? result.getText() : String(result);
+          if (text && text.trim()) {
+            handleDetectedCodeRef.current?.(text.trim());
+          }
+        }
+      });
+    } catch (zxingErr) {
+      console.warn("Erreur démarrage décodeur ZXing :", zxingErr);
+    }
+  }, []);
+
+  // Attachement du flux vidéo et lecture playsInline
+  const attachStreamToVideo = useCallback(
+    (stream: MediaStream) => {
+      currentStreamRef.current = stream;
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = stream;
+      video.setAttribute("playsinline", "true");
+
+      // Vérifier support flash / torche
+      try {
+        const track = stream.getVideoTracks()[0];
+        if (track && typeof track.getCapabilities === "function") {
+          const caps: any = track.getCapabilities();
+          setIsTorchSupported(!!caps.torch);
+        } else {
+          setIsTorchSupported(false);
+        }
+      } catch {
+        setIsTorchSupported(false);
+      }
+
+      video
+        .play()
+        .then(() => {
+          setIsScannerRunning(true);
+          setCameraError(null);
+          startScanningLoop(video);
+        })
+        .catch((err) => {
+          console.warn("Video autoplay avertissement :", err);
+          setIsScannerRunning(true);
+          setCameraError(null);
+          startScanningLoop(video);
+        });
+
+      // Énumération des caméras disponibles (une fois la permission accordée)
+      if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
+        navigator.mediaDevices
+          .enumerateDevices()
+          .then((devices) => {
+            const videoDevices = devices.filter((d) => d.kind === "videoinput");
+            setAvailableCameras(videoDevices);
+          })
+          .catch(() => {});
+      }
+    },
+    [startScanningLoop]
+  );
+
+  // Gestion souple de getUserMedia avec repli (Exactement selon les spécifications)
+  const startCamera = useCallback(
+    async (preferredCameraId?: string, preferredFacing?: "environment" | "user") => {
+      stopCamera();
+      setCameraError(null);
+
+      const targetFacing = preferredFacing || facingMode;
+
+      try {
+        // Tentative 1 : Caméra arrière mobile avec contrainte souple
+        const videoConstraints: MediaTrackConstraints = preferredCameraId
+          ? { deviceId: { exact: preferredCameraId } }
+          : {
+              facingMode: { ideal: targetFacing },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            };
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false,
+        });
+        attachStreamToVideo(stream);
+      } catch (err: any) {
+        console.warn("Tentative idéale échouée, essai avec n'importe quelle caméra disponible...", err);
+        try {
+          // Tentative 2 : Repli universel sans contrainte
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+          attachStreamToVideo(fallbackStream);
+        } catch (finalError: any) {
+          console.error("Accès caméra impossible :", finalError);
+          setIsScannerRunning(false);
+          if (finalError.name === "NotAllowedError" || finalError.name === "PermissionDeniedError") {
+            setCameraError("Permission caméra refusée. Cliquez sur l'icône à gauche du lien rahalatbladna.ma pour autoriser l'appareil photo.");
+          } else if (finalError.name === "NotFoundError") {
+            setCameraError("Aucune caméra physique détectée.");
+          } else {
+            setCameraError("Impossible d'accéder à la caméra (" + finalError.name + "). Vérifiez les autorisations de votre téléphone.");
+          }
+        }
+      }
+    },
+    [stopCamera, attachStreamToVideo, facingMode]
+  );
+
   // Détection du QR Code
   const handleDetectedCode = async (rawCode: string) => {
     if (isProcessingRef.current || scanModal) return;
     isProcessingRef.current = true;
+    isScanningRef.current = false;
 
-    // Pause la caméra immédiatement
-    try {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.pause(true);
-      }
-    } catch {}
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    if (zxingReaderRef.current) {
+      try {
+        zxingReaderRef.current.reset();
+      } catch {}
+    }
 
     await processCheckIn(rawCode);
   };
@@ -314,25 +405,27 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
     setScanModal(null);
     isProcessingRef.current = false;
+    isScanningRef.current = true;
 
-    try {
-      if (scannerRef.current) {
-        scannerRef.current.resume();
-      }
-    } catch {
+    if (videoRef.current && currentStreamRef.current && currentStreamRef.current.active) {
+      startScanningLoop(videoRef.current);
+    } else {
       startCamera();
     }
   };
 
   // Bascule torche / flash
   const toggleTorch = async () => {
-    if (!scannerRef.current || !isTorchSupported) return;
+    if (!currentStreamRef.current || !isTorchSupported) return;
     try {
-      const newState = !isTorchOn;
-      await scannerRef.current.applyVideoConstraints({
-        advanced: [{ torch: newState }] as any,
-      });
-      setIsTorchOn(newState);
+      const track = currentStreamRef.current.getVideoTracks()[0];
+      if (track) {
+        const newState = !isTorchOn;
+        await (track as any).applyConstraints({
+          advanced: [{ torch: newState }],
+        });
+        setIsTorchOn(newState);
+      }
     } catch (err) {
       console.warn("Torch error:", err);
     }
@@ -340,7 +433,7 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
 
   // Bascule caméra avant / arrière / multi-objectifs
   const switchCamera = async (targetCameraId?: string) => {
-    await stopCamera();
+    stopCamera();
 
     if (targetCameraId) {
       setSelectedCameraId(targetCameraId);
@@ -426,51 +519,11 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
     }
   };
 
-  // Énumération des caméras et démarrage initial du scanner
+  // Démarrage initial de la caméra sur mobile
   useEffect(() => {
-    let isCancelled = false;
-
-    async function loadCameras() {
-      try {
-        // 1. Demander une première autorisation pour pouvoir lire les labels des caméras
-        const initialStream = await getCameraStream();
-        initialStream.getTracks().forEach((track) => track.stop()); // Libérer le flux temporaire
-
-        // 2. Énumérer les périphériques réels
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter((device) => device.kind === "videoinput");
-
-        if (isCancelled) return;
-        setAvailableCameras(videoDevices);
-
-        let chosenCameraId = "";
-        if (videoDevices.length > 0) {
-          // Sélectionne en priorité la caméra arrière si identifiée, sinon la première disponible
-          const backCamera = videoDevices.find((d) =>
-            d.label.toLowerCase().includes("back") ||
-            d.label.toLowerCase().includes("arrière") ||
-            d.label.toLowerCase().includes("environment")
-          );
-          chosenCameraId = backCamera ? backCamera.deviceId : videoDevices[0].deviceId;
-          setSelectedCameraId(chosenCameraId);
-          selectedCameraIdRef.current = chosenCameraId;
-        }
-
-        if (!isCancelled) {
-          await startCamera(chosenCameraId || undefined);
-        }
-      } catch (err) {
-        console.error("Erreur accès caméras :", err);
-        if (!isCancelled) {
-          await startCamera();
-        }
-      }
-    }
-
-    loadCameras();
+    startCamera().catch((e) => console.error("Initial startCamera error:", e));
 
     return () => {
-      isCancelled = true;
       stopCamera();
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
@@ -614,8 +667,14 @@ export function LiveBoardingScanner({ initialTrips, preselectedTripId, initialOp
       <main className="flex-1 flex flex-col items-center justify-center p-4 relative overflow-hidden">
         {/* Conteneur du Viseur Caméra */}
         <div className="w-full max-w-sm aspect-square relative rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 shadow-xl flex items-center justify-center">
-          {/* Element DOM requis pour html5-qrcode */}
-          <div id="reader-viewport" className="w-full h-full object-cover" />
+          {/* Element vidéo optimisé pour mobile avec les 4 attributs indispensables */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
 
           {/* Cadre de Ciblage Cyan Stylisé (4 Coins & Effet Laser) */}
           <div className="absolute inset-6 pointer-events-none z-10 flex flex-col justify-between">

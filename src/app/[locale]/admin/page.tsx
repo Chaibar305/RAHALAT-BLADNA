@@ -245,91 +245,60 @@ export default async function AdminDashboardPage({
     },
   ];
 
-  // Helper pour afficher le badge de statut réel et exact
+  // Helper pour afficher le badge de statut basé EXCLUSIVEMENT sur booking.status
   const renderStatusBadge = (b: any) => {
-    const isRejected =
-      b.paymentStatus === PaymentStatus.REJECTED ||
-      b.latestPaymentStatus === PaymentStatus.REJECTED;
+    const st = b.status;
 
-    const isCancelledClient = b.status === BookingStatus.CANCELLED_BY_CLIENT;
-    const isCancelledAdmin =
-      b.status === BookingStatus.CANCELLED_BY_ADMIN ||
-      b.status === "CANCELLED" ||
-      b.status === "ANNULEE";
-
-    const isSoldOut =
-      !isRejected &&
-      !isCancelledClient &&
-      !isCancelledAdmin &&
-      (b.status === BookingStatus.FULLY_PAID ||
-        b.paymentStatus === "PAYE_INTEGRALEMENT" ||
-        (b.paid >= b.total && b.total > 0));
-
-    const isDepositValid =
-      !isRejected &&
-      !isCancelledClient &&
-      !isCancelledAdmin &&
-      !isSoldOut &&
-      (b.status === BookingStatus.DEPOSIT_PAID ||
-        b.status === "DEPOSIT_CONFIRMED" ||
-        b.paymentStatus === "ACOMPTE_VERSE" ||
-        b.paid > 0);
-
-    const isPendingReview =
-      !isRejected &&
-      !isCancelledClient &&
-      !isCancelledAdmin &&
-      !isSoldOut &&
-      !isDepositValid &&
-      (b.status === BookingStatus.PENDING_VERIFICATION ||
-        b.paymentStatus === PaymentStatus.PENDING ||
-        b.latestPaymentStatus === PaymentStatus.PENDING);
-
-    if (isCancelledClient) {
-      return (
-        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-          {isAr ? "ملغى من العميل" : "Annulé Client"}
-        </span>
-      );
-    }
-    if (isCancelledAdmin) {
-      return (
-        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-          {isAr ? "ملغى من الوكالة" : "Annulé Agence"}
-        </span>
-      );
-    }
-    if (isRejected) {
-      return (
-        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-          {isAr ? "وصل مرفوض (0 د.م)" : "Reçu Rejeté (0 MAD)"}
-        </span>
-      );
-    }
-    if (isSoldOut) {
+    // 1. FULLY_PAID => Badge bleu "Soldé 100%"
+    if (st === BookingStatus.FULLY_PAID || st === "PAYE_INTEGRALEMENT") {
       return (
         <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
           {isAr ? "مدفوع بالكامل (100%)" : "Soldé 100%"}
         </span>
       );
     }
-    if (isDepositValid) {
+
+    // 2. DEPOSIT_PAID => Badge vert "Acompte Validé (400 MAD)"
+    if (st === BookingStatus.DEPOSIT_PAID || st === "DEPOSIT_CONFIRMED" || st === "ACOMPTE_VERSE") {
+      const depositDisplay = b.paid > 0 ? formatMAD(b.paid, locale) : "400 MAD";
       return (
         <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-          {isAr ? "عربون مؤكد" : "Acompte Validé"}
+          {isAr ? `عربون مؤكد (${depositDisplay})` : `Acompte Validé (${depositDisplay})`}
         </span>
       );
     }
-    if (isPendingReview) {
+
+    // 3. CANCELLED_BY_CLIENT => Badge rouge "Annulé par le client"
+    if (st === BookingStatus.CANCELLED_BY_CLIENT) {
       return (
-        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/40 animate-pulse">
-          {isAr ? "في انتظار التحقق" : "À Vérifier"}
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          {isAr ? "ملغى من العميل" : "Annulé par le client"}
         </span>
       );
     }
+
+    // 4. CANCELLED_BY_ADMIN => Badge gris "Annulé par l'agence"
+    if (st === BookingStatus.CANCELLED_BY_ADMIN || st === "CANCELLED" || st === "ANNULEE") {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
+          {isAr ? "ملغى من الوكالة" : "Annulé par l'agence"}
+        </span>
+      );
+    }
+
+    // 5. REJECTED => Badge rouge "Reçu Rejeté"
+    if (st === "REJECTED") {
+      return (
+        <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          {isAr ? "وصل مرفوض" : "Reçu Rejeté"}
+        </span>
+      );
+    }
+
+    // 6. PENDING_VERIFICATION (par défaut pour PENDING_VERIFICATION, PENDING_PAYMENT, EN_ATTENTE) => Badge orange "En Attente Vérification"
     return (
-      <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
-        {isAr ? "في انتظار الدفع" : "Non Payé"}
+      <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase font-mono bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/40">
+        {isAr ? "في انتظار التحقق" : "En Attente Vérification"}
       </span>
     );
   };
