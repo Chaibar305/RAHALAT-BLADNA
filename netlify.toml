@@ -4,6 +4,8 @@
 [build.environment]
   NODE_VERSION = "20"
   AUTH_TRUST_HOST = "true"
+  NEXTAUTH_URL = "https://rahalatbladna.ma"
+  AUTH_URL = "https://rahalatbladna.ma"
   SECRETS_SCAN_ENABLED = "false"
 
 [[plugins]]

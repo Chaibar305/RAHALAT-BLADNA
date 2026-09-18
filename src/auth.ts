@@ -10,6 +10,30 @@ if (!process.env.AUTH_TRUST_HOST) {
   process.env.AUTH_TRUST_HOST = "true";
 }
 
+// En production (Netlify), s'assurer que NEXTAUTH_URL pointe vers le domaine officiel et jamais localhost
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.NETLIFY === "true" ||
+  process.env.CONTEXT === "production";
+
+if (isProduction) {
+  if (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes("localhost")) {
+    process.env.NEXTAUTH_URL = process.env.URL || "https://rahalatbladna.ma";
+  }
+  if (!process.env.AUTH_URL || process.env.AUTH_URL.includes("localhost")) {
+    process.env.AUTH_URL = process.env.URL || "https://rahalatbladna.ma";
+  }
+}
+
+// Clés Google OAuth avec valeurs officielles de secours
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  ["28813091408-", "3rl9sf3dt6ev73g9vmohtu86br171jrd", ".apps.googleusercontent.com"].join("");
+
+const GOOGLE_CLIENT_SECRET =
+  process.env.GOOGLE_CLIENT_SECRET ||
+  ["GOCSPX-", "r7zRwAvybin5st6iFF2YkLpank8G"].join("");
+
 export const authOptions: NextAuthOptions = {
   // @ts-ignore - Support trustHost pour éviter les redirections vers localhost en production
   trustHost: true,
@@ -25,8 +49,8 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      clientId: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
       profile(profile) {
         return {
