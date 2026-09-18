@@ -5,10 +5,9 @@ import fs from "fs";
 import path from "path";
 
 // Moteur de mise en forme arabe cursif (Shaping) et réordonnancement bidirectionnel (BiDi UAX #9)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { ArabicShaper } = require("arabic-persian-reshaper");
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const bidiFactory = require("bidi-js");
+import { ArabicShaper } from "arabic-persian-reshaper";
+import bidiFactory from "bidi-js";
+
 const bidi = bidiFactory();
 
 const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
