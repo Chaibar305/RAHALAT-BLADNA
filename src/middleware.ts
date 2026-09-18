@@ -33,11 +33,29 @@ export default async function middleware(req: NextRequest) {
       process.env.NEXTAUTH_SECRET ||
       "85i2RnsI5hHS9b0hSllV3rdt/Pwcx6ATi18qdQmEvz4=";
 
-    // Récupérer le token de session JWT
-    const token = await getToken({
+    // Récupérer le token de session JWT (support des cookies sécurisés HTTPS et standard)
+    let token = await getToken({
       req,
       secret,
+      cookieName: "__Secure-next-auth.session-token",
+      secureCookie: true,
     });
+
+    if (!token) {
+      token = await getToken({
+        req,
+        secret,
+        cookieName: "next-auth.session-token",
+        secureCookie: false,
+      });
+    }
+
+    if (!token) {
+      token = await getToken({
+        req,
+        secret,
+      });
+    }
 
     // A. Utilisateur non connecté -> Redirection vers la page de connexion
     if (!token) {
