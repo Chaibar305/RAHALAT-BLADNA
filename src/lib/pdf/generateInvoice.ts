@@ -4,8 +4,14 @@ import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
 
-// Reshaper arabe pour corriger le bug d'encodage et afficher les caractères cursifs liés de droite à gauche
+// Moteur de mise en forme arabe cursif (Shaping) et réordonnancement bidirectionnel (BiDi UAX #9)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ArabicShaper } = require("arabic-persian-reshaper");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const bidiFactory = require("bidi-js");
+const bidi = bidiFactory();
+
+const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
 export interface InvoiceItem {
   description: string;
@@ -85,18 +91,34 @@ function loadLogoEmblem(): string | null {
 }
 
 /**
- * Formate et reshapate les portions de texte en arabe pour un affichage cursif parfait dans jsPDF
+ * Formate et applique le shaping contextuel et l'algorithme bidirectionnel (BiDi)
+ * sur le texte arabe pour un affichage cursif fluide de droite à gauche dans jsPDF.
  */
 export function formatArabic(text: string): string {
   if (!text) return "";
-  const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-  if (!arabicRegex.test(text)) {
+  if (!ARABIC_REGEX.test(text)) {
     return text;
   }
-  return text.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, (match) => {
-    const reshaped = ArabicShaper.convertArabic(match);
-    return reshaped.split("").reverse().join("");
-  });
+
+  // Traitement ligne par ligne si le texte contient des sauts de ligne
+  if (text.includes("\n")) {
+    return text
+      .split("\n")
+      .map((line) => formatArabic(line))
+      .join("\n");
+  }
+
+  try {
+    // 1. Mise en forme contextuelle des glyphes arabes (lettres cursives liées + ligatures lam-alef)
+    const reshaped = ArabicShaper.convertArabic(text);
+
+    // 2. Algorithme Bidirectionnel (UBA / BiDi) pour réordonner visuellement les caractères LTR pour jsPDF
+    const embeddingLevels = bidi.getEmbeddingLevels(reshaped);
+    return bidi.getReorderedString(reshaped, embeddingLevels);
+  } catch (error) {
+    console.warn("formatArabic fallback notice:", error);
+    return text;
+  }
 }
 
 /**
@@ -256,7 +278,7 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     clientLineY += 5;
   }
   if (data.clientAddress && clientLineY <= startY + 33) {
-    doc.text(`Adresse : ${data.clientAddress}`, 18, clientLineY);
+    doc.text(formatArabic(`Adresse : ${data.clientAddress}`), 18, clientLineY);
   }
 
   // Cadre Prestation & Voyage (Droite)
@@ -273,11 +295,11 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
 
   doc.setFontSize(8);
   doc.setTextColor(...COLOR_DARK_CYAN);
-  const formattedTripTitle = formatArabic(data.tripTitle);
-  const truncatedTitle = formattedTripTitle.length > 44
-    ? formattedTripTitle.substring(0, 42) + "..."
-    : formattedTripTitle;
-  doc.text(truncatedTitle, rightCardX + 4, startY + 13);
+  const rawTripTitle = data.tripTitle || "";
+  const truncatedRawTitle = rawTripTitle.length > 44
+    ? rawTripTitle.substring(0, 42).trim() + "..."
+    : rawTripTitle;
+  doc.text(formatArabic(truncatedRawTitle), rightCardX + 4, startY + 13);
 
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7.5);

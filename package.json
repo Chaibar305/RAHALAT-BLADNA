@@ -26,6 +26,7 @@
     "@types/nodemailer": "^8.0.1",
     "arabic-persian-reshaper": "^1.0.1",
     "bcryptjs": "^3.0.3",
+    "bidi-js": "^1.1.0",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
     "html5-qrcode": "^2.3.8",
