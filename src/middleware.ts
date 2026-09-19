@@ -76,6 +76,26 @@ export default async function middleware(req: NextRequest) {
     }
   }
 
+  // 2. Fichiers de vérification de domaine statiques (.html, etc.) : bypass direct sans redirection
+  if (pathname.endsWith(".html") || pathname.includes("facebook-domain-verification")) {
+    return NextResponse.next();
+  }
+
+  // 3. Crawler Meta / Facebook : réécriture interne de / vers /fr au lieu de redirection 307 pour que Meta lise les balises <head> directement avec 200 OK
+  const userAgent = (req.headers.get("user-agent") || "").toLowerCase();
+  const isMetaBot =
+    userAgent.includes("facebookexternalhit") ||
+    userAgent.includes("facebot") ||
+    userAgent.includes("facebook");
+
+  if (pathname === "/" && isMetaBot) {
+    const rewriteUrl = new URL(`/${defaultLocale}`, req.url);
+    const response = NextResponse.rewrite(rewriteUrl);
+    response.headers.set("X-Frame-Options", "DENY");
+    response.headers.set("X-Content-Type-Options", "nosniff");
+    return response;
+  }
+
   // Traitement standard internationalisation next-intl
   const response = intlMiddleware(req);
 
@@ -96,6 +116,6 @@ export default async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|favicon.png|logo-icon-transparent.png|images|manifest.json|sw.js).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|favicon.png|logo-icon-transparent.png|images|manifest.json|sw.js|.*\\.html).*)",
   ],
 };
