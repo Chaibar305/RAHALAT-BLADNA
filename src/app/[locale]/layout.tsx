@@ -30,6 +30,11 @@ export const metadata = {
     ],
     apple: "/images/logo/logo-emblem.png",
   },
+  verification: {
+    other: {
+      "facebook-domain-verification": ["ztmjvrdrcuao4ixbo2nhfaxrvroxde"],
+    },
+  },
 };
 
 export default async function LocaleLayout({
@@ -49,6 +54,9 @@ export default async function LocaleLayout({
       className={`${tajawal.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <meta name="facebook-domain-verification" content="ztmjvrdrcuao4ixbo2nhfaxrvroxde" />
+      </head>
       <body
         className={`min-h-screen ${
           isRtl ? "font-arabic" : "font-sans"
