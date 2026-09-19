@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { trackClientMetaEvent, generateMetaEventId } from "@/lib/meta-client";
-import { trackViewContentCapiAction } from "@/actions/meta-analytics.actions";
+import { trackViewContentCapiAction } from "../../actions/meta-analytics.actions";
 
 interface MetaViewContentProps {
   id: string;
@@ -50,7 +50,7 @@ export function MetaViewContent({
       price,
       currency,
       pageUrl: typeof window !== "undefined" ? window.location.href : undefined,
-    }).catch((err) => {
+    }).catch((err: any) => {
       console.warn("⚠️ [Meta CAPI] Erreur silencieuse sur ViewContent:", err);
     });
   }, [id, title, category, price, currency]);
