@@ -13,6 +13,7 @@ import { PickupPointDto, AddonDto, PassengerSubmission } from "@/types";
 import { formatMAD } from "@/lib/utils";
 import { InvoiceDownloadButton } from "@/components/invoices/InvoiceDownloadButton";
 import { createBookingAction } from "@/actions/booking.actions";
+import { trackClientMetaEvent, generateMetaEventId } from "@/lib/meta-client";
 
 export interface BookingDepartureDateDto {
   id: string;
@@ -279,6 +280,30 @@ export function BookingCard({
 
     startTransition(async () => {
       try {
+        // 1. Génération d'un eventId unique partagé pour déduplication stricte Meta Pixel Client <-> CAPI Serveur
+        const checkoutEventId = generateMetaEventId("rb_checkout");
+
+        // 2. Déclenchement simultané de l'événement InitiateCheckout côté client
+        trackClientMetaEvent(
+          "InitiateCheckout",
+          {
+            content_name: tripTitle || "Circuit Rahalat Bladna",
+            content_category: "Circuit Touristique",
+            content_ids: [tripId],
+            contents: [
+              {
+                id: tripId,
+                quantity: passengers.length,
+                item_price: activeBasePrice,
+              },
+            ],
+            currency: "MAD",
+            value: financials.total,
+            num_items: passengers.length,
+          },
+          checkoutEventId
+        );
+
         const payload = {
           tripId,
           departureDateId: selectedDateId || undefined,
@@ -291,10 +316,25 @@ export function BookingCard({
           selectedAddons,
           paymentOption,
           paymentMethod: paymentMethod === "BANK_TRANSFER" ? ("VIREMENT" as const) : ("CARTE" as const),
+          eventId: checkoutEventId,
         };
 
         const res = await createBookingAction(payload);
         if (res.success && "reference" in res && res.reference) {
+          // 3. Déclenchement de l'événement Lead côté client après validation
+          const leadEventId = `lead_${res.reference}`;
+          trackClientMetaEvent(
+            "Lead",
+            {
+              content_name: tripTitle || "Circuit Rahalat Bladna",
+              currency: "MAD",
+              value: financials.total,
+              order_id: res.reference,
+              num_items: passengers.length,
+            },
+            leadEventId
+          );
+
           setIsSubmitted(true);
           setBookingResult({
             reference: res.reference,

@@ -16,6 +16,7 @@ import { TripReviewsCarousel } from "@/components/trips/TripReviewsCarousel";
 import { MobileFloatingBookingBar } from "@/components/trips/MobileFloatingBookingBar";
 import { MoyenAtlasConfortShowcase } from "@/components/trips/MoyenAtlasConfortShowcase";
 import { JbelMoussaShowcase } from "@/components/trips/JbelMoussaShowcase";
+import { MetaViewContent } from "@/components/analytics/MetaViewContent";
 
 export const dynamic = "force-dynamic";
 
@@ -898,6 +899,13 @@ export default async function TripDetailPage({
 
   return (
     <div className="bg-tp-ivory min-h-screen pb-28 lg:pb-16">
+      <MetaViewContent
+        id={dbTrip?.id || slug}
+        title={trip.title}
+        category={dbTrip?.destinationRegion || "Circuit & Aventure"}
+        price={Number(dbTrip?.basePrice || 1250)}
+        currency="MAD"
+      />
       {/* IMMERSIVE HEADER BANNER */}
       <div className="relative min-h-[400px] sm:min-h-[480px] bg-tp-midnight text-white flex items-end overflow-hidden">
         <img

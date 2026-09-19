@@ -17,6 +17,7 @@ export const CreateBookingSchema = z.object({
   paymentMethod: z.enum(["CARTE", "VIREMENT", "ESPECES", "AGENCE"]).default("VIREMENT"),
   receiptUrl: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  eventId: z.string().optional().nullable(),
 });
 
 export type CreateBookingInput = z.infer<typeof CreateBookingSchema>;

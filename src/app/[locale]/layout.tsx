@@ -5,6 +5,7 @@ import { getMessages } from "next-intl/server";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { FacebookPixel } from "@/components/analytics/FacebookPixel";
 import "../globals.css";
 
 const tajawal = Tajawal({
@@ -53,6 +54,7 @@ export default async function LocaleLayout({
           isRtl ? "font-arabic" : "font-sans"
         } antialiased selection:bg-tp-cyan-soft selection:text-tp-midnight`}
       >
+        <FacebookPixel />
         <AuthProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem>

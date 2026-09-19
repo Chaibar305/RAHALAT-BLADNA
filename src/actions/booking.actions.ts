@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { CreateBookingSchema, CreateBookingInput } from "@/lib/validations/booking.schema";
 import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import { updateBookingAction as updateBookingActionImpl } from "./admin-bookings";
+import { sendMetaCapiEvent } from "@/lib/meta-capi";
 
 /**
  * Server Action : Création d'une réservation atomique avec Devis et Facture
@@ -99,6 +100,38 @@ export async function createBookingAction(input: CreateBookingInput) {
     const quoteNum = `DEV-2026-${Date.now().toString().slice(-6)}`;
     const invoiceNum = `FAC-2026-${Date.now().toString().slice(-6)}`;
 
+    // Déclenchement Meta Conversions API (CAPI) pour InitiateCheckout avec déduplication stricte via eventId
+    if (data.eventId) {
+      const leadTraveler = data.travelers[0];
+      sendMetaCapiEvent({
+        eventName: "InitiateCheckout",
+        eventId: data.eventId,
+        eventSourceUrl: `${process.env.NEXTAUTH_URL || "https://rahalatbladna.ma"}/fr/trips/${trip.slug}`,
+        userData: {
+          email: userEmail || undefined,
+          phone: leadTraveler?.phone || undefined,
+          fullName: leadTraveler?.fullName,
+        },
+        customData: {
+          currency: "MAD",
+          value: totalAmount,
+          content_name: trip.titleFr,
+          content_category: trip.destinationRegion || "Circuit Touristique",
+          content_ids: [trip.id],
+          contents: [
+            {
+              id: trip.id,
+              quantity: paxCount,
+              item_price: basePrice,
+            },
+          ],
+          num_items: paxCount,
+        },
+      }).catch((err) => {
+        console.warn("⚠️ [createBookingAction] CAPI InitiateCheckout non-bloquant :", err);
+      });
+    }
+
     // 4. Transaction Prisma Atomique ($transaction)
     const result = await prisma.$transaction(async (tx) => {
       // Insertion de la réservation : STRICTEMENT PENDING_VERIFICATION et 0 DH comptabilisés tant que non validé par l'admin
@@ -172,6 +205,29 @@ export async function createBookingAction(input: CreateBookingInput) {
     });
 
     console.log("✅ [createBookingAction] Réservation créée avec succès:", result.reference);
+
+    // Déclenchement Meta Conversions API (CAPI) pour l'événement Lead (ou Purchase)
+    const leadTraveler = data.travelers[0];
+    const leadEventId = `lead_${result.reference}`;
+    sendMetaCapiEvent({
+      eventName: "Lead",
+      eventId: leadEventId,
+      eventSourceUrl: `${process.env.NEXTAUTH_URL || "https://rahalatbladna.ma"}/fr/trips/${trip.slug}`,
+      userData: {
+        email: userEmail || undefined,
+        phone: leadTraveler?.phone || undefined,
+        fullName: leadTraveler?.fullName,
+      },
+      customData: {
+        currency: "MAD",
+        value: totalAmount,
+        content_name: trip.titleFr,
+        order_id: result.reference,
+        num_items: paxCount,
+      },
+    }).catch((err) => {
+      console.warn("⚠️ [createBookingAction] CAPI Lead non-bloquant :", err);
+    });
 
     revalidatePath("/mon-compte/reservations");
     revalidatePath("/admin/bookings");
