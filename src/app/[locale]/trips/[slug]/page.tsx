@@ -1,4 +1,5 @@
 import React from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { 
@@ -19,6 +20,71 @@ import { JbelMoussaShowcase } from "@/components/trips/JbelMoussaShowcase";
 import { MetaViewContent } from "@/components/analytics/MetaViewContent";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { locale: string; slug: string };
+}): Promise<Metadata> {
+  const trip = await prisma.trip.findUnique({
+    where: { slug: params.slug },
+  });
+
+  if (!trip) {
+    return {
+      title: "Circuit Non Trouvé | Rahalat Bladna",
+      description: "Découvrez nos circuits et voyages organisés au Maroc avec Rahalat Bladna.",
+    };
+  }
+
+  const isAr = params.locale === "ar";
+  const title = isAr
+    ? `${trip.titleAr || trip.titleFr} | رحلات بلادنا`
+    : `${trip.titleFr} - Voyage Organisé au Maroc | Rahalat Bladna`;
+
+  const rawDescription = isAr
+    ? (trip.overviewAr || trip.shortDescriptionAr || trip.shortDescriptionFr || "")
+    : (trip.overviewFr || trip.shortDescriptionFr || trip.shortDescriptionAr || "");
+
+  const description = rawDescription.trim().slice(0, 160);
+  const baseUrl = "https://www.rahalatbladna.ma";
+  const imageUrl = trip.coverImageUrl || "/images/hero-banner.jpg";
+  const fullImageUrl = imageUrl.startsWith("http") ? imageUrl : `${baseUrl}${imageUrl}`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `${baseUrl}/${params.locale}/trips/${trip.slug}`,
+      languages: {
+        "fr-MA": `${baseUrl}/fr/trips/${trip.slug}`,
+        "ar-MA": `${baseUrl}/ar/trips/${trip.slug}`,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${baseUrl}/${params.locale}/trips/${trip.slug}`,
+      siteName: "Rahalat Bladna",
+      images: [
+        {
+          url: fullImageUrl,
+          width: 1200,
+          height: 630,
+          alt: trip.titleFr,
+        },
+      ],
+      locale: isAr ? "ar_MA" : "fr_MA",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [fullImageUrl],
+    },
+  };
+}
 
 export default async function TripDetailPage({
   params: { locale, slug },
@@ -897,8 +963,44 @@ export default async function TripDetailPage({
   // Condition stricte : N'afficher la carte QUE si la section est active ET qu'un texte existe
   const shouldShowOverview = (dbTrip as any)?.showOverview !== false && Boolean(overviewText?.trim());
 
+  // Données Structurées Schema.org (TouristTrip & TravelAgency) pour Rich Snippets Google
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "TouristTrip",
+    name: isAr ? (dbTrip?.titleAr || trip.title) : (dbTrip?.titleFr || trip.title),
+    description: isAr
+      ? (dbTrip?.overviewAr || dbTrip?.shortDescriptionAr || trip.title)
+      : (dbTrip?.overviewFr || dbTrip?.shortDescriptionFr || trip.title),
+    touristType: "Aventure, Découverte, Weekend, Randonnée",
+    offers: {
+      "@type": "Offer",
+      price: Number(trip.basePrice),
+      priceCurrency: "MAD",
+      availability: "https://schema.org/InStock",
+      validFrom: new Date().toISOString().split("T")[0],
+      url: `https://www.rahalatbladna.ma/${locale}/trips/${slug}`,
+    },
+    provider: {
+      "@type": "TravelAgency",
+      name: "Rahalat Bladna",
+      url: "https://www.rahalatbladna.ma",
+      telephone: "+212603660658",
+      priceRange: "MAD",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Casablanca",
+        addressCountry: "MA",
+      },
+    },
+  };
+
   return (
     <div className="bg-tp-ivory min-h-screen pb-28 lg:pb-16">
+      {/* DONNÉES STRUCTURÉES SCHEMA.ORG (JSON-LD) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <MetaViewContent
         id={dbTrip?.id || slug}
         title={trip.title}

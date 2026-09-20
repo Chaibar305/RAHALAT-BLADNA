@@ -76,8 +76,13 @@ export default async function middleware(req: NextRequest) {
     }
   }
 
-  // 2. Fichiers de vérification de domaine statiques (.html, etc.) : bypass direct sans redirection
-  if (pathname.endsWith(".html") || pathname.includes("facebook-domain-verification")) {
+  // 2. Fichiers SEO et de vérification statiques (.html, sitemap.xml, robots.txt) : bypass direct sans redirection
+  if (
+    pathname.endsWith(".html") ||
+    pathname.includes("facebook-domain-verification") ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/robots.txt"
+  ) {
     return NextResponse.next();
   }
 
@@ -116,6 +121,6 @@ export default async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|favicon.png|logo-icon-transparent.png|images|manifest.json|sw.js|.*\\.html).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|favicon.png|logo-icon-transparent.png|images|manifest.json|sw.js|sitemap.xml|robots.txt|.*\\.html).*)",
   ],
 };
