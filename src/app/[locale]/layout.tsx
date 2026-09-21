@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { FacebookPixel } from "@/components/analytics/FacebookPixel";
+import { Analytics } from "@vercel/analytics/next";
 import "../globals.css";
 
 const tajawal = Tajawal({
@@ -100,6 +101,7 @@ export default async function LocaleLayout({
             </ThemeProvider>
           </NextIntlClientProvider>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );

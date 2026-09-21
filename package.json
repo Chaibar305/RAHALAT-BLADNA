@@ -25,6 +25,7 @@
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "@types/nodemailer": "^8.0.1",
+    "@vercel/analytics": "^2.0.1",
     "arabic-persian-reshaper": "^1.0.1",
     "bcryptjs": "^3.0.3",
     "bidi-js": "^1.1.0",
