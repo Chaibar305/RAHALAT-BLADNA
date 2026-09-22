@@ -525,7 +525,7 @@ export function AdminJobPostingsManager({ initialJobs }: AdminJobPostingsManager
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Titre de l'offre <span className="text-rose-500">*</span>
+                    Titre de l&apos;offre <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"

@@ -783,7 +783,7 @@ export function AdminApplicationsManager({
                 className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
               >
                 <UserCheck className="w-4 h-4" />
-                <span>Convertir en membre d'équipe</span>
+                <span>Convertir en membre d&apos;équipe</span>
               </button>
             </div>
           </div>
@@ -798,7 +798,7 @@ export function AdminApplicationsManager({
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-base font-black text-slate-900 dark:text-white">
-                  Convertir en membre d'équipe
+                  Convertir en membre d&apos;équipe
                 </h3>
               </div>
               <button
@@ -829,7 +829,7 @@ export function AdminApplicationsManager({
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                  Rôle attribué dans l'équipe
+                  Rôle attribué dans l&apos;équipe
                 </label>
                 <select
                   value={targetTeamRole}
