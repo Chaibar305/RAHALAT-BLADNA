@@ -177,6 +177,12 @@ export function Footer() {
                   {t("reviews")}
                 </Link>
               </li>
+              <li>
+                <Link href={`/${locale}/carrieres`} className="hover:text-tp-cyan transition font-bold text-tp-cyan flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" />
+                  <span>{locale === "ar" ? "انضم لفريقنا (توظيف)" : "Carrières & Recrutement"}</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

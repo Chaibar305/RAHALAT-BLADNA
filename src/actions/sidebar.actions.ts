@@ -9,14 +9,20 @@ import { PaymentStatus } from "@prisma/client";
  */
 export async function getAdminSidebarCountsAction() {
   try {
-    const [bookingsCount, pendingPaymentsCount] = await Promise.all([
+    const [bookingsCount, pendingPaymentsCount, newApplicationsCount] = await Promise.all([
       prisma.booking.count(),
       prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
+      prisma.jobApplication.count({ where: { status: "NOUVELLE" } }),
     ]);
 
-    return { success: true, bookingsCount, pendingPaymentsCount };
+    return { 
+      success: true, 
+      bookingsCount, 
+      pendingPaymentsCount,
+      newApplicationsCount 
+    };
   } catch (error) {
     console.error("Erreur getAdminSidebarCountsAction:", error);
-    return { success: false, bookingsCount: 0, pendingPaymentsCount: 0 };
+    return { success: false, bookingsCount: 0, pendingPaymentsCount: 0, newApplicationsCount: 0 };
   }
 }

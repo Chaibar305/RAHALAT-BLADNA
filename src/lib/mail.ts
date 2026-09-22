@@ -298,3 +298,160 @@ export async function sendPasswordResetEmail({
     };
   }
 }
+
+// ====================================================
+// EMAILS MODULE RECRUTEMENT
+// ====================================================
+
+/**
+ * Envoie l'accusé de réception automatique au candidat
+ */
+export async function sendApplicationConfirmationEmail({
+  to,
+  fullName,
+  jobTitle,
+  locale = "fr",
+}: {
+  to: string;
+  fullName: string;
+  jobTitle: string;
+  locale?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const isAr = locale === "ar";
+    const subject = isAr
+      ? `رحلات بلادنا | تم استلام طلب ترشحكم لمنصب: ${jobTitle}`
+      : `Rahalat Bladna | Confirmation de réception de votre candidature : ${jobTitle}`;
+
+    const text = isAr
+      ? `مرحباً ${fullName}،\n\nنشكركم على اهتمامكم بالانضمام إلى فريق رحلات بلادنا. لقد تم استلام طلب ترشحكم لمنصب "${jobTitle}" بنجاح.\n\nسيقوم فريق الموارد البشرية بدراسة ملفكم وسنتواصل معكم في حال تطابق مؤهلاتكم مع المنصب المطلوب.\n\nمع خالص التحيات،\nفريق رحلات بلادنا`
+      : `Bonjour ${fullName},\n\nNous vous remercions de votre intérêt pour rejoindre l'aventure Rahalat Bladna. Votre candidature pour le poste "${jobTitle}" a bien été enregistrée.\n\nNotre équipe RH examine attentivement votre profil et nous reviendrons vers vous si vos compétences correspondent à nos attentes.\n\nCordialement,\nL'équipe Rahalat Bladna`;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+        <div style="background: #0B2239; padding: 28px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800;">
+            ${isAr ? "رحلات بلادنا • Rahalat Bladna" : "Rahalat Bladna"}
+          </h1>
+          <p style="color: #1BBACA; margin: 6px 0 0 0; font-size: 13px; font-weight: 700;">
+            ${isAr ? "تأكيد استلام طلب الترشح" : "Accusé de réception de candidature"}
+          </p>
+        </div>
+        <div style="padding: 32px; color: #1e293b; line-height: 1.6;" dir="${isAr ? "rtl" : "ltr"}">
+          <p style="font-size: 15px; margin-top: 0;">
+            ${isAr ? `مرحباً <strong>${fullName}</strong>،` : `Bonjour <strong>${fullName}</strong>,`}
+          </p>
+          <p style="font-size: 14px; color: #475569;">
+            ${
+              isAr
+                ? `نشكركم على اهتمامكم بالانضمام إلى عائلة <strong>رحلات بلادنا</strong>. نؤكد لكم استلام طلبكم الخاص بمنصب: <br/><strong style="color: #0B2239; font-size: 16px;">${jobTitle}</strong>.`
+                : `Nous vous remercions de votre intérêt pour rejoindre l'équipe de <strong>Rahalat Bladna</strong>. Nous vous confirmons la bonne réception de votre candidature pour le poste :<br/><strong style="color: #0B2239; font-size: 16px;">${jobTitle}</strong>.`
+            }
+          </p>
+          <div style="background: #f8fafc; border-left: 4px solid #1BBACA; padding: 14px 18px; margin: 20px 0; border-radius: 8px;">
+            <p style="margin: 0; font-size: 13px; color: #334155;">
+              ${
+                isAr
+                  ? "سيقوم فريق الموارد البشرية والعمليات بدراسة سيرتكم الذاتية بعناية. سنتواصل معكم عبر الهاتف أو البريد الإلكتروني في حال تطابق ملفكم مع متطلبات المنصب."
+                  : "Notre équipe recrutement examine votre profil avec attention. Si votre expérience correspond à nos besoins actuels, nous prendrons contact avec vous pour un premier échange."
+              }
+            </p>
+          </div>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+            ${isAr ? "نتمنى لكم كامل التوفيق،" : "Nous vous souhaitons pleine réussite dans vos démarches,"}<br/>
+            <strong>${isAr ? "فريق رحلات بلادنا" : "L'équipe Rahalat Bladna"}</strong>
+          </p>
+        </div>
+      </div>
+    `;
+
+    const transporter = getEmailTransporter();
+    if (!transporter) {
+      console.log(`[RECRUITEMENT EMAIL (DEV)] Accusé de réception envoyé à ${to} pour le poste "${jobTitle}"`);
+      return { success: true };
+    }
+
+    const senderEmail =
+      process.env.EMAIL_FROM ||
+      process.env.SMTP_USER ||
+      "recrutement@rahalatbladna.ma";
+
+    await transporter.sendMail({
+      from: `"Rahalat Bladna Recrutement" <${senderEmail}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("[sendApplicationConfirmationEmail] Erreur :", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Envoie une alerte interne à l'équipe RH lors d'une nouvelle candidature
+ */
+export async function sendAdminNewApplicationNotification({
+  jobTitle,
+  candidateName,
+  candidateEmail,
+  candidatePhone,
+  applicationId,
+}: {
+  jobTitle: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string;
+  applicationId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const adminEmail =
+      process.env.ADMIN_ALERT_EMAIL ||
+      process.env.CONTACT_EMAIL ||
+      process.env.SMTP_USER ||
+      "admin@rahalatbladna.ma";
+
+    const subject = `[Nouveau Candidat] ${candidateName} a postulé pour : ${jobTitle}`;
+    const text = `Nouvelle candidature reçue !\n\nPoste : ${jobTitle}\nCandidat : ${candidateName}\nEmail : ${candidateEmail}\nTéléphone : ${candidatePhone}\nID Candidature : ${applicationId}\n\nConsultez l'espace admin : https://www.rahalatbladna.ma/fr/admin/recrutement/candidatures`;
+
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
+        <h2 style="color: #0B2239; margin-top: 0;">🚀 Nouvelle candidature reçue</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 6px 0; color: #64748b; font-size: 13px;">Poste :</td><td style="font-weight: bold; color: #0B2239;">${jobTitle}</td></tr>
+          <tr><td style="padding: 6px 0; color: #64748b; font-size: 13px;">Candidat :</td><td style="font-weight: bold;">${candidateName}</td></tr>
+          <tr><td style="padding: 6px 0; color: #64748b; font-size: 13px;">Email :</td><td><a href="mailto:${candidateEmail}">${candidateEmail}</a></td></tr>
+          <tr><td style="padding: 6px 0; color: #64748b; font-size: 13px;">Téléphone :</td><td><a href="tel:${candidatePhone}">${candidatePhone}</a></td></tr>
+        </table>
+        <div style="margin-top: 24px; text-align: center;">
+          <a href="https://www.rahalatbladna.ma/fr/admin/recrutement/candidatures" style="background: #0B2239; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+            Ouvrir la candidature dans l'Admin
+          </a>
+        </div>
+      </div>
+    `;
+
+    const transporter = getEmailTransporter();
+    if (!transporter) {
+      console.log(`[ADMIN NOTIFICATION (DEV)] Nouvelle candidature de ${candidateName} pour "${jobTitle}"`);
+      return { success: true };
+    }
+
+    await transporter.sendMail({
+      from: `"Rahalat Bladna RH" <${process.env.SMTP_USER || "no-reply@rahalatbladna.ma"}>`,
+      to: adminEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("[sendAdminNewApplicationNotification] Erreur :", error);
+    return { success: false, error: error.message };
+  }
+}
+

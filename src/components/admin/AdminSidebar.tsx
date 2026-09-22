@@ -9,7 +9,8 @@ import { useSession, signOut } from "next-auth/react";
 import { 
   LayoutDashboard, FileText, Ticket, Compass, 
   CreditCard, Settings, LogOut, ExternalLink, 
-  ShieldCheck, ChevronRight, Menu, X, Bell, User, Users, Building2, QrCode, UserCheck 
+  ShieldCheck, ChevronRight, Menu, X, Bell, User, Users, Building2, QrCode, UserCheck,
+  Briefcase, UserPlus
 } from "lucide-react";
 import { getAdminSidebarCountsAction } from "@/actions/sidebar.actions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -20,12 +21,20 @@ export function AdminSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
-  const [counts, setCounts] = useState<{ bookingsCount: number; pendingPaymentsCount: number }>({ bookingsCount: 0, pendingPaymentsCount: 0 });
+  const [counts, setCounts] = useState<{ 
+    bookingsCount: number; 
+    pendingPaymentsCount: number;
+    newApplicationsCount: number;
+  }>({ bookingsCount: 0, pendingPaymentsCount: 0, newApplicationsCount: 0 });
 
   useEffect(() => {
     getAdminSidebarCountsAction().then((res) => {
       if (res.success) {
-        setCounts({ bookingsCount: res.bookingsCount, pendingPaymentsCount: res.pendingPaymentsCount });
+        setCounts({ 
+          bookingsCount: res.bookingsCount, 
+          pendingPaymentsCount: res.pendingPaymentsCount,
+          newApplicationsCount: res.newApplicationsCount || 0,
+        });
       }
     });
   }, [pathname]);
@@ -90,6 +99,18 @@ export function AdminSidebar() {
       href: `/${locale}/admin/team`,
       icon: UserCheck,
       badge: "RBAC",
+    },
+    {
+      label: isAr ? "عروض التوظيف والفرص" : "Recrutement : Offres",
+      href: `/${locale}/admin/recrutement/offres`,
+      icon: Briefcase,
+      badge: null,
+    },
+    {
+      label: isAr ? "طلبات الترشح والسير الذاتية" : "Candidatures & CVs",
+      href: `/${locale}/admin/recrutement/candidatures`,
+      icon: UserPlus,
+      badge: counts.newApplicationsCount > 0 ? String(counts.newApplicationsCount) : null,
     },
     {
       label: isAr ? "إعدادات المنظومة والمستخدمين" : "Paramètres Généraux",

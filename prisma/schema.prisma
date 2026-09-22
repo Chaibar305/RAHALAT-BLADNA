@@ -647,3 +647,109 @@ model TripVariableCostPerPerson {
   @@index([tripId])
 }
 
+// ====================================================
+// MODULE RECRUTEMENT & GESTION DES CANDIDATURES
+// ====================================================
+
+enum StaffRole {
+  ORGANISATEUR
+  GUIDE_ANIMATEUR
+  CHAUFFEUR
+  SURVEILLANT
+  AUTRE
+}
+
+enum EmploymentType {
+  FREELANCE
+  TEMPS_PARTIEL
+  TEMPS_PLEIN
+  MISSION_PONCTUELLE
+  STAGE
+}
+
+enum SalaryType {
+  FORFAIT_MISSION
+  MENSUEL
+  POURCENTAGE
+  A_DISCUTER
+}
+
+enum JobStatus {
+  BROUILLON
+  PUBLIEE
+  FERMEE
+  ARCHIVEE
+}
+
+enum ApplicationStatus {
+  NOUVELLE
+  EN_EXAMEN
+  ENTRETIEN_PROGRAMME
+  ACCEPTEE
+  REFUSEE
+  ARCHIVEE
+}
+
+model JobPosting {
+  id             String         @id @default(cuid())
+  title          String         // ex: "Guide-Animateur", "Media Buyer", "Photographe de voyage"
+  slug           String         @unique
+  role           StaffRole?     // lien optionnel vers le rôle staff correspondant si applicable
+  department     String?        // ex: "Terrain", "Marketing", "Support Client"
+  employmentType EmploymentType
+  location       String         // ex: "Rabat", "Départs multiples villes"
+  descriptionFr  String         @db.Text
+  descriptionEn  String?        @db.Text
+  descriptionAr  String?        @db.Text
+  missions       String[]       // liste des missions
+  requirements   String[]       // profil recherché
+  salaryMin      Decimal?       @db.Decimal(10, 2)
+  salaryMax      Decimal?       @db.Decimal(10, 2)
+  salaryType     SalaryType?    // FORFAIT_MISSION, MENSUEL, POURCENTAGE, A_DISCUTER
+  status         JobStatus      @default(BROUILLON)
+  publishedAt    DateTime?
+  closingDate    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  applications   JobApplication[]
+
+  @@index([status])
+  @@index([slug])
+}
+
+model JobApplication {
+  id             String            @id @default(cuid())
+  jobPostingId   String
+  fullName       String
+  email          String
+  phone          String
+  city           String?
+  coverMessage   String?           @db.Text
+  cvFileUrl      String            // URL signée ou clé R2 du CV PDF
+  cvFileName     String
+  cvFileSize     Int
+  portfolioLinks String[]          // liens Instagram, Drive, book photo, etc.
+  availability   String?
+  status         ApplicationStatus @default(NOUVELLE)
+  internalNotes  String?           @db.Text  // notes admin uniquement, jamais exposées au candidat
+  ratedScore     Int?              // note interne optionnelle 1-5
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  jobPosting     JobPosting        @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@index([jobPostingId])
+  @@index([status])
+  @@index([email])
+}
+
+model JobAlertSubscription {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+

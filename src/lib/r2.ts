@@ -2,7 +2,8 @@ import {
   S3Client, 
   PutObjectCommand, 
   DeleteObjectCommand, 
-  GetObjectCommand 
+  GetObjectCommand,
+  HeadObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -133,3 +134,144 @@ export async function getPresignedUploadUrl(
     key: cleanKey,
   };
 }
+
+// ====================================================
+// GESTION SÉCURISÉE DES CV DE RECRUTEMENT (CONFIDENTIEL)
+// ====================================================
+
+const MAX_CV_FILE_SIZE = 5 * 1024 * 1024; // 5 Mo
+
+/**
+ * Génère la clé de stockage standardisée pour un CV candidat
+ */
+export function generateCvStorageKey(jobPostingId: string, applicationId: string): string {
+  const cleanJobId = jobPostingId.trim().replace(/[^a-zA-Z0-9-_]/g, "");
+  const cleanAppId = applicationId.trim().replace(/[^a-zA-Z0-9-_]/g, "");
+  return `recruitment/cv/${cleanJobId}/${cleanAppId}.pdf`;
+}
+
+/**
+ * Nettoie le nom de fichier d'un CV
+ */
+export function sanitizeCvFileName(fileName: string): string {
+  const base = fileName.replace(/\.pdf$/i, "");
+  const cleanBase = base
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9-_]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 50);
+  return `${cleanBase || "cv"}.pdf`;
+}
+
+/**
+ * Valide et génère une URL présignée PUT pour le téléversement direct du CV vers Cloudflare R2
+ */
+export async function getPresignedCvUploadUrl({
+  jobPostingId,
+  applicationId,
+  fileName,
+  fileSize,
+  mimeType,
+}: {
+  jobPostingId: string;
+  applicationId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}): Promise<{ uploadUrl: string; key: string; sanitizedFileName: string }> {
+  // 1. Validation stricte du type MIME
+  if (mimeType !== "application/pdf") {
+    throw new Error("Format invalide : Seuls les fichiers PDF sont acceptés.");
+  }
+
+  // 2. Validation de l'extension
+  if (!fileName.toLowerCase().endsWith(".pdf")) {
+    throw new Error("Extension invalide : Le fichier doit se terminer par .pdf.");
+  }
+
+  // 3. Validation de la taille maximale (5 Mo)
+  if (fileSize > MAX_CV_FILE_SIZE) {
+    throw new Error("Taille excessive : Le fichier CV ne doit pas dépasser 5 Mo.");
+  }
+
+  if (fileSize <= 0) {
+    throw new Error("Fichier vide ou corrompu.");
+  }
+
+  const key = generateCvStorageKey(jobPostingId, applicationId);
+  const sanitizedFileName = sanitizeCvFileName(fileName);
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ContentType: "application/pdf",
+    Metadata: {
+      originalName: sanitizedFileName,
+      uploadedAt: new Date().toISOString(),
+    },
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, {
+    expiresIn: 600, // 10 minutes
+  });
+
+  return {
+    uploadUrl,
+    key,
+    sanitizedFileName,
+  };
+}
+
+/**
+ * Génère une URL signée temporaire (15 minutes) pour consulter ou télécharger un CV (Admin uniquement)
+ * Jamais d'URL publique permanente pour préserver les données personnelles du candidat.
+ */
+export async function getPresignedCvDownloadUrl(
+  key: string,
+  expiresInSeconds: number = 900,
+  downloadName?: string
+): Promise<string> {
+  const cleanKey = key.startsWith("/") ? key.substring(1) : key;
+  const fileName = downloadName ? sanitizeCvFileName(downloadName) : "cv-candidat.pdf";
+
+  const command = new GetObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: cleanKey,
+    ResponseContentType: "application/pdf",
+    ResponseContentDisposition: `inline; filename="${fileName}"`,
+  });
+
+  return await getSignedUrl(r2Client, command, {
+    expiresIn: expiresInSeconds, // 15 minutes par défaut
+  });
+}
+
+/**
+ * Vérifie l'existence effective et les métadonnées d'un CV sur R2
+ */
+export async function verifyCvExistsOnR2(key: string): Promise<{ exists: boolean; size?: number }> {
+  try {
+    const cleanKey = key.startsWith("/") ? key.substring(1) : key;
+    const command = new HeadObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: cleanKey,
+    });
+    const response = await r2Client.send(command);
+    return {
+      exists: true,
+      size: response.ContentLength,
+    };
+  } catch (error) {
+    return { exists: false };
+  }
+}
+
+/**
+ * Supprime physiquement un CV de Cloudflare R2
+ */
+export async function deleteCvFromR2(key: string): Promise<boolean> {
+  return await deleteFromR2(key);
+}
+
