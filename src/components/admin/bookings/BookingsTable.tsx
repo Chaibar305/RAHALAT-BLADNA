@@ -4,10 +4,11 @@ import React, { useState, useMemo } from "react";
 import { 
   Search, Eye, QrCode, MessageSquare, 
   Calendar, CheckCircle2, Clock, AlertTriangle, 
-  FileText, ArrowRight, XCircle, Loader2, Edit2, Trash2 
+  FileText, ArrowRight, XCircle, Loader2, Edit2, Trash2, Mail 
 } from "lucide-react";
 import { formatMAD } from "@/lib/utils";
 import { BookingAdminItem } from "./ReceiptVerificationModal";
+import { sendBookingInvoiceEmailAction } from "@/actions/booking.actions";
 
 interface BookingsTableProps {
   bookings: BookingAdminItem[];
@@ -29,6 +30,27 @@ export function BookingsTable({
   locale = "fr",
 }: BookingsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [emailFeedback, setEmailFeedback] = useState<{ id: string; success: boolean; msg: string } | null>(null);
+
+  const handleSendInvoiceEmail = async (b: BookingAdminItem) => {
+    if (sendingEmailId) return;
+    setSendingEmailId(b.id);
+    setEmailFeedback(null);
+    try {
+      const res = await sendBookingInvoiceEmailAction(b.id);
+      if (res.success) {
+        setEmailFeedback({ id: b.id, success: true, msg: res.message || "Facture PDF envoyée au client avec succès !" });
+      } else {
+        setEmailFeedback({ id: b.id, success: false, msg: res.error || "Échec de l'envoi de l'email." });
+      }
+    } catch (err: any) {
+      setEmailFeedback({ id: b.id, success: false, msg: err.message || "Erreur de connexion." });
+    } finally {
+      setSendingEmailId(null);
+      setTimeout(() => setEmailFeedback(null), 5000);
+    }
+  };
 
   const filteredBookings = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -45,6 +67,31 @@ export function BookingsTable({
 
   return (
     <div className="space-y-4">
+      {/* Toast de Notification d'envoi d'email */}
+      {emailFeedback && (
+        <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between gap-3 shadow-md transition-all ${
+          emailFeedback.success 
+            ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800" 
+            : "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800"
+        }`}>
+          <div className="flex items-center gap-2">
+            {emailFeedback.success ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            )}
+            <span>{emailFeedback.msg}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setEmailFeedback(null)} 
+            className="text-xs font-black opacity-60 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Search Input Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
         <div className="relative w-full sm:w-96">
@@ -252,6 +299,21 @@ export function BookingsTable({
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          {/* Bouton Envoyer Facture / Reçu PDF par Email */}
+                          <button
+                            type="button"
+                            disabled={sendingEmailId === b.id}
+                            onClick={() => handleSendInvoiceEmail(b)}
+                            className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 transition shadow-xs disabled:opacity-50"
+                            title={`Envoyer le reçu/facture PDF par email à ${b.clientEmail || "client"}`}
+                          >
+                            {sendingEmailId === b.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Mail className="w-3.5 h-3.5" />
+                            )}
+                          </button>
 
                           {/* Bouton Modifier Dossier */}
                           {onEditBooking && (

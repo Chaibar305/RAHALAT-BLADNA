@@ -4,6 +4,7 @@ export const TravelerInputSchema = z.object({
   fullName: z.string().min(2, "Le nom complet est obligatoire"),
   cinPassport: z.string().min(3, "N° CIN ou Passeport requis"),
   phone: z.string().optional().nullable(),
+  email: z.string().email("Format email invalide").optional().nullable(),
   category: z.enum(["ADULTE", "ENFANT"]).default("ADULTE"),
   emergencyContact: z.string().optional().nullable(),
 });

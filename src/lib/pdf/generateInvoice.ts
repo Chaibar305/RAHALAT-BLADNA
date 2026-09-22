@@ -205,7 +205,7 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   // Coordonnées de Contact Réelles
   doc.setFontSize(7.5);
   doc.setTextColor(203, 213, 225);
-  doc.text("Tél / WhatsApp : +212 603-660658  |  Email : machaibare@gmail.com  |  Rabat, Maroc", 30, 31);
+  doc.text("Tél / WhatsApp : +212 603-660658  |  Email : contact@rahalatbladna.ma  |  Rabat, Maroc", 30, 31);
 
   // Badge Document (Cadre blanc à droite)
   const badgeWidth = 62;
@@ -558,7 +558,7 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     doc.setFontSize(5.8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      "Service Client & Assistance Départs : +212 603-660658 | Email : machaibare@gmail.com | Rabat, Maroc",
+      "Service Client & Assistance Départs : +212 603-660658 | Email : contact@rahalatbladna.ma | Rabat, Maroc",
       pageWidth / 2,
       pageHeight - 3,
       { align: "center" }

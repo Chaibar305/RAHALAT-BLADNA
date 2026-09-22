@@ -56,6 +56,7 @@ export interface PassengerSubmission {
   cinOrPassport: string;
   nationality: string;
   phone: string;
+  email?: string;
   gender: 'M' | 'F';
   roomType: 'DOUBLE_TWIN' | 'DOUBLE_MATRIMONIAL' | 'TRIPLE' | 'SINGLE';
   pickupPointId: string;

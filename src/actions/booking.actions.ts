@@ -8,6 +8,12 @@ import { CreateBookingSchema, CreateBookingInput } from "@/lib/validations/booki
 import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
 import { updateBookingAction as updateBookingActionImpl } from "./admin-bookings";
 import { sendMetaCapiEvent } from "@/lib/meta-capi";
+import { getInvoiceData } from "@/actions/invoice.actions";
+import { generateInvoicePdfBuffer } from "@/lib/pdf/generateInvoice";
+import { 
+  sendBookingConfirmationWithPdfEmail, 
+  sendPaymentValidatedWithInvoiceEmail 
+} from "@/lib/mail";
 
 /**
  * Server Action : Création d'une réservation atomique avec Devis et Facture
@@ -42,7 +48,7 @@ export async function createBookingAction(input: CreateBookingInput) {
     if (!userId) {
       // Si aucun utilisateur en session, associer au premier client ou créer un compte voyageur
       const leadTraveler = data.travelers[0];
-      const guestEmail = userEmail || `client-${Date.now()}@rahalatbladna.ma`;
+      const guestEmail = (leadTraveler as any)?.email || userEmail || `client-${Date.now()}@rahalatbladna.ma`;
 
       const newUser = await prisma.user.upsert({
         where: { email: guestEmail },
@@ -229,6 +235,36 @@ export async function createBookingAction(input: CreateBookingInput) {
       console.warn("⚠️ [createBookingAction] CAPI Lead non-bloquant :", err);
     });
 
+    // Envoi automatique de l'email de confirmation au client avec le Reçu / Devis PDF
+    const targetEmail = (leadTraveler as any)?.email || userEmail;
+    if (targetEmail && !targetEmail.includes("guest-") && !targetEmail.includes("@rahalatbladna.ma")) {
+      (async () => {
+        try {
+          const docId = quoteNum || invoiceNum;
+          const pdfData = await getInvoiceData(docId);
+          const pdfBuffer = await generateInvoicePdfBuffer(pdfData);
+          await sendBookingConfirmationWithPdfEmail({
+            to: targetEmail,
+            clientName: leadTraveler.fullName,
+            bookingReference: result.reference,
+            tripTitle: trip.titleFr,
+            travelDates: selectedDeparture
+              ? `${new Date(selectedDeparture.startDate).toLocaleDateString("fr-FR")} au ${new Date(selectedDeparture.endDate).toLocaleDateString("fr-FR")}`
+              : "Date à confirmer",
+            passengerCount: paxCount,
+            totalAmount,
+            depositAmount: Number(result.depositAmount),
+            remainingBalance: totalAmount - Number(result.depositAmount),
+            pickupCity: (trip as any).departureCity || "Casablanca / Rabat",
+            pdfBuffer,
+            pdfFileName: `Recu_Reservation_${result.reference}.pdf`,
+          });
+        } catch (emailErr) {
+          console.warn("⚠️ [createBookingAction] Envoi d'email de confirmation non-bloquant :", emailErr);
+        }
+      })();
+    }
+
     revalidatePath("/mon-compte/reservations");
     revalidatePath("/admin/bookings");
     revalidatePath("/admin");
@@ -403,6 +439,46 @@ export async function validateBookingDepositAction(
       }
     });
 
+    // Envoi automatique de la Facture officielle acquittée par email au client
+    (async () => {
+      try {
+        const fullBooking = await prisma.booking.findUnique({
+          where: { id: bookingId },
+          include: {
+            user: true,
+            invoice: true,
+            trip: true,
+            departureDate: true,
+            travelers: true,
+          },
+        });
+
+        const targetClientEmail = fullBooking?.user?.email;
+        if (targetClientEmail && !targetClientEmail.includes("@rahalatbladna.ma") && fullBooking?.invoice) {
+          const pdfData = await getInvoiceData(fullBooking.invoice.number);
+          const pdfBuffer = await generateInvoicePdfBuffer(pdfData);
+          await sendPaymentValidatedWithInvoiceEmail({
+            to: targetClientEmail,
+            clientName: fullBooking.user.fullName || fullBooking.user.name || "Client Voyageur",
+            bookingReference: fullBooking.reference,
+            invoiceNumber: fullBooking.invoice.number,
+            tripTitle: fullBooking.trip.titleFr,
+            travelDates: fullBooking.departureDate
+              ? `${new Date(fullBooking.departureDate.startDate).toLocaleDateString("fr-FR")} au ${new Date(fullBooking.departureDate.endDate).toLocaleDateString("fr-FR")}`
+              : "Date confirmée",
+            amountPaid: depositToCredit,
+            remainingBalance: Math.max(0, total - depositToCredit),
+            totalAmount: total,
+            passengerCount: fullBooking.travelers.length || 1,
+            pdfBuffer,
+            pdfFileName: `Facture_${fullBooking.invoice.number}.pdf`,
+          });
+        }
+      } catch (mailErr) {
+        console.warn("⚠️ [validateBookingDepositAction] Envoi d'email facture non-bloquant :", mailErr);
+      }
+    })();
+
     revalidatePath("/admin/bookings");
     revalidatePath("/admin/clients");
     revalidatePath("/mon-compte/reservations");
@@ -410,7 +486,7 @@ export async function validateBookingDepositAction(
 
     return {
       success: true,
-      message: "Acompte validé avec succès. Le billet d'embarquement officiel est maintenant émis.",
+      message: "Acompte validé avec succès. Facture PDF officielle transmise au voyageur.",
     };
   } catch (error: any) {
     console.error("validateBookingDepositAction error:", error);
@@ -477,12 +553,52 @@ export async function validateBookingFullPaymentAction(bookingId: string, notes?
       }
     });
 
+    // Envoi automatique de la Facture soldée par email au client
+    (async () => {
+      try {
+        const fullBooking = await prisma.booking.findUnique({
+          where: { id: bookingId },
+          include: {
+            user: true,
+            invoice: true,
+            trip: true,
+            departureDate: true,
+            travelers: true,
+          },
+        });
+
+        const targetClientEmail = fullBooking?.user?.email;
+        if (targetClientEmail && !targetClientEmail.includes("@rahalatbladna.ma") && fullBooking?.invoice) {
+          const pdfData = await getInvoiceData(fullBooking.invoice.number);
+          const pdfBuffer = await generateInvoicePdfBuffer(pdfData);
+          await sendPaymentValidatedWithInvoiceEmail({
+            to: targetClientEmail,
+            clientName: fullBooking.user.fullName || fullBooking.user.name || "Client Voyageur",
+            bookingReference: fullBooking.reference,
+            invoiceNumber: fullBooking.invoice.number,
+            tripTitle: fullBooking.trip.titleFr,
+            travelDates: fullBooking.departureDate
+              ? `${new Date(fullBooking.departureDate.startDate).toLocaleDateString("fr-FR")} au ${new Date(fullBooking.departureDate.endDate).toLocaleDateString("fr-FR")}`
+              : "Date confirmée",
+            amountPaid: total,
+            remainingBalance: 0,
+            totalAmount: total,
+            passengerCount: fullBooking.travelers.length || 1,
+            pdfBuffer,
+            pdfFileName: `Facture_${fullBooking.invoice.number}.pdf`,
+          });
+        }
+      } catch (mailErr) {
+        console.warn("⚠️ [validateBookingFullPaymentAction] Envoi d'email facture non-bloquant :", mailErr);
+      }
+    })();
+
     revalidatePath("/admin/bookings");
     revalidatePath("/admin/clients");
     revalidatePath("/mon-compte/reservations");
     revalidatePath("/admin");
 
-    return { success: true, message: "Paiement intégral validé. Dossier soldé à 100%." };
+    return { success: true, message: "Paiement intégral validé. Facture PDF soldée transmise au voyageur." };
   } catch (error: any) {
     console.error("validateBookingFullPaymentAction error:", error);
     return { success: false, error: error.message || "Erreur lors de la validation du solde." };
@@ -808,5 +924,101 @@ export async function deleteBookingAdminAction(bookingId: string) {
     return { success: false, error: error.message || "Erreur lors de la suppression de la réservation." };
   }
 }
+
+/**
+ * Action Admin : Renvoyer manuellement le reçu ou la facture PDF par email au client
+ */
+export async function sendBookingInvoiceEmailAction(bookingId: string) {
+  await requireAdminSession("SEND_BOOKING_INVOICE_EMAIL");
+
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: true,
+        invoice: true,
+        quote: true,
+        trip: true,
+        departureDate: true,
+        travelers: true,
+      },
+    });
+
+    if (!booking) {
+      return { success: false, error: "Dossier de réservation introuvable." };
+    }
+
+    const recipientEmail = booking.user?.email;
+    if (!recipientEmail || recipientEmail.includes("@rahalatbladna.ma")) {
+      return {
+        success: false,
+        error: "Aucune adresse email client valide associée à ce dossier.",
+      };
+    }
+
+    const docId = booking.invoice?.number || booking.quote?.number;
+    if (!docId) {
+      return { success: false, error: "Aucun document (facture/devis) associé à cette réservation." };
+    }
+
+    const pdfData = await getInvoiceData(docId);
+    const pdfBuffer = await generateInvoicePdfBuffer(pdfData);
+
+    const isPaid = booking.status === BookingStatus.DEPOSIT_PAID || booking.status === BookingStatus.FULLY_PAID;
+
+    if (isPaid && booking.invoice) {
+      const emailRes = await sendPaymentValidatedWithInvoiceEmail({
+        to: recipientEmail,
+        clientName: booking.user?.fullName || booking.user?.name || "Client Voyageur",
+        bookingReference: booking.reference,
+        invoiceNumber: booking.invoice.number,
+        tripTitle: booking.trip?.titleFr || "Circuit Rahalat Bladna",
+        travelDates: booking.departureDate
+          ? `${new Date(booking.departureDate.startDate).toLocaleDateString("fr-FR")} au ${new Date(booking.departureDate.endDate).toLocaleDateString("fr-FR")}`
+          : "Date confirmée",
+        amountPaid: Number(booking.amountPaid),
+        remainingBalance: Math.max(0, Number(booking.totalAmount) - Number(booking.amountPaid)),
+        totalAmount: Number(booking.totalAmount),
+        passengerCount: booking.travelers.length || 1,
+        pdfBuffer,
+        pdfFileName: `Facture_${booking.invoice.number}.pdf`,
+      });
+
+      if (!emailRes.success) {
+        return { success: false, error: emailRes.error || "Échec de l'envoi de l'email." };
+      }
+    } else {
+      const emailRes = await sendBookingConfirmationWithPdfEmail({
+        to: recipientEmail,
+        clientName: booking.user?.fullName || booking.user?.name || "Client Voyageur",
+        bookingReference: booking.reference,
+        tripTitle: booking.trip?.titleFr || "Circuit Rahalat Bladna",
+        travelDates: booking.departureDate
+          ? `${new Date(booking.departureDate.startDate).toLocaleDateString("fr-FR")} au ${new Date(booking.departureDate.endDate).toLocaleDateString("fr-FR")}`
+          : "Date à confirmer",
+        passengerCount: booking.travelers.length || 1,
+        totalAmount: Number(booking.totalAmount),
+        depositAmount: Number(booking.depositAmount),
+        remainingBalance: Math.max(0, Number(booking.totalAmount) - Number(booking.depositAmount)),
+        pickupCity: booking.trip?.departureCity || "Casablanca / Rabat",
+        pdfBuffer,
+        pdfFileName: `Recu_Reservation_${booking.reference}.pdf`,
+      });
+
+      if (!emailRes.success) {
+        return { success: false, error: emailRes.error || "Échec de l'envoi de l'email." };
+      }
+    }
+
+    return {
+      success: true,
+      message: `Document PDF envoyé avec succès à ${recipientEmail}.`,
+    };
+  } catch (error: any) {
+    console.error("[sendBookingInvoiceEmailAction] Error:", error);
+    return { success: false, error: error.message || "Erreur lors de l'envoi de la facture." };
+  }
+}
+
 
 

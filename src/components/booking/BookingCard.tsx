@@ -311,6 +311,7 @@ export function BookingCard({
             fullName: p.fullName,
             cinPassport: p.cinOrPassport,
             phone: p.phone || undefined,
+            email: p.email || undefined,
             category: "ADULTE" as const,
           })),
           selectedAddons,
@@ -735,7 +736,7 @@ export function BookingCard({
 
                       <input
                         type="tel"
-                        placeholder={isRtl ? "الهاتف المحمول" : "Téléphone mobile"}
+                        placeholder={isRtl ? "الهاتف المحمول *" : "Téléphone mobile *"}
                         value={p.phone || ""}
                         onChange={(e) => {
                           const copy = [...passengers];
@@ -745,6 +746,21 @@ export function BookingCard({
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-tp-cyan focus:outline-none"
                       />
                     </div>
+
+                    {/* Email du voyageur principal pour réception de la facture / reçu */}
+                    {idx === 0 && (
+                      <input
+                        type="email"
+                        placeholder={isRtl ? "البريد الإلكتروني لاستلام التذكرة والفاتورة *" : "Email pour recevoir le reçu et la facture *"}
+                        value={p.email || ""}
+                        onChange={(e) => {
+                          const copy = [...passengers];
+                          copy[idx].email = e.target.value;
+                          setPassengers(copy);
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-tp-cyan focus:outline-none"
+                      />
+                    )}
 
                     {/* Préférence de Chambre */}
                     <div>
