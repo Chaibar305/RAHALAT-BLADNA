@@ -5,6 +5,16 @@ export const locales = ['fr', 'ar', 'en'] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = 'fr';
 
+import frMessages from '../../messages/fr.json';
+import arMessages from '../../messages/ar.json';
+import enMessages from '../../messages/en.json';
+
+const messagesMap: Record<string, any> = {
+  fr: frMessages,
+  ar: arMessages,
+  en: enMessages,
+};
+
 export default getRequestConfig(async ({ requestLocale }) => {
   let locale = await requestLocale;
 
@@ -14,6 +24,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: (await import(`../../public/locales/${locale}.json`)).default,
+    messages: messagesMap[locale] || messagesMap[defaultLocale],
   };
 });

@@ -6,7 +6,7 @@ import {
   MapPin, Calendar, Clock, ChevronRight, Compass, Sparkles
 } from "lucide-react";
 import { BookingCard } from "@/components/booking/BookingCard";
-import { MerzougaInteractiveDetail, ProgramStep } from "@/components/trips/MerzougaInteractiveDetail";
+import type { ProgramStep } from "@/components/trips/MerzougaInteractiveDetail";
 import { GalleryItem } from "@/components/shared/TripGallery";
 import { formatMAD } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
@@ -14,9 +14,8 @@ import { ScheduledWeekBanner } from "@/components/trips/ScheduledWeekBanner";
 import { getScheduledThisWeekTripsAction } from "@/actions/trip.actions";
 import { TripFaqAccordion } from "@/components/trips/TripFaqAccordion";
 import { TripReviewsCarousel } from "@/components/trips/TripReviewsCarousel";
+import { UniversalTripShowcase } from "@/components/trips/UniversalTripShowcase";
 import { MobileFloatingBookingBar } from "@/components/trips/MobileFloatingBookingBar";
-import { MoyenAtlasConfortShowcase } from "@/components/trips/MoyenAtlasConfortShowcase";
-import { JbelMoussaShowcase } from "@/components/trips/JbelMoussaShowcase";
 import { MetaViewContent } from "@/components/analytics/MetaViewContent";
 
 export const dynamic = "force-dynamic";
@@ -1112,23 +1111,11 @@ export default async function TripDetailPage({
               </div>
             )}
 
-            {/* COMPOSANT SPÉCIAL CHARTE MOYEN ATLAS (Bleu Atlantique #073B5C, Terracotta #D9683A, Vert Atlas #2E6B57) */}
-            {isMoyenAtlas && (
-              <MoyenAtlasConfortShowcase slug={slug} />
-            )}
-
-            {/* COMPOSANT SPÉCIAL JBEL MOUSSA & BELYOUNECH (Ascension & Plongée) */}
-            {isJbelMoussa && (
-              <JbelMoussaShowcase slug={slug} />
-            )}
-
-            <MerzougaInteractiveDetail
-              galleryItems={galleryItems}
-              programSteps={programSteps}
-              pickupPoints={trip.pickupPoints}
-              included={trip.included}
-              excluded={trip.excluded}
-              checklist={trip.checklist}
+            {/* PRÉSENTATION UNIFIÉE ET HAUT DE GAMME DU CIRCUIT (DESIGN MOYEN ATLAS / TRIPLAN V5 SUR TOUS LES CIRCUITS) */}
+            <UniversalTripShowcase
+              slug={slug}
+              dbTrip={dbTrip}
+              locale={locale}
             />
           </div>
 
