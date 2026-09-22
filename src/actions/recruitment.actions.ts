@@ -102,11 +102,11 @@ export async function getPublicJobPostingsAction(filters?: {
     });
 
     const departments = Array.from(
-      new Set(allPublished.map((j) => j.department).filter(Boolean))
+      new Set(allPublished.map((j: { department: string | null; location: string }) => j.department).filter(Boolean))
     ) as string[];
 
     const locations = Array.from(
-      new Set(allPublished.map((j) => j.location).filter(Boolean))
+      new Set(allPublished.map((j: { department: string | null; location: string }) => j.location).filter(Boolean))
     ) as string[];
 
     return {
@@ -609,7 +609,7 @@ export async function getAdminJobApplicationsAction(filters?: {
       ARCHIVEE: 0,
     };
 
-    countsByStatus.forEach((c) => {
+    countsByStatus.forEach((c: any) => {
       statusCounts[c.status] = c._count._all;
     });
 

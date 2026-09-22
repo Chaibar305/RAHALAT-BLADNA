@@ -52,7 +52,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ]);
 
     // 4. Pages dynamiques de chaque offre d'emploi
-    const jobRoutes = jobs.flatMap((job) => [
+    const jobRoutes = jobs.flatMap((job: { slug: string; updatedAt: Date }) => [
       {
         url: `${baseUrl}/fr/carrieres/${job.slug}`,
         lastModified: job.updatedAt,
