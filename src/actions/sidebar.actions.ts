@@ -12,7 +12,7 @@ export async function getAdminSidebarCountsAction() {
     const [bookingsCount, pendingPaymentsCount, newApplicationsCount] = await Promise.all([
       prisma.booking.count(),
       prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
-      prisma.jobApplication.count({ where: { status: "NOUVELLE" } }),
+      (prisma as any).jobApplication.count({ where: { status: "NOUVELLE" } }),
     ]);
 
     return { 

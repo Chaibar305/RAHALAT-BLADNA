@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const { jobPostingId, applicationId, fileName, fileSize, mimeType } = parseResult.data;
 
     // 1. Vérifier que l'offre existe et est bien publiée
-    const job = await prisma.jobPosting.findUnique({
+    const job = await (prisma as any).jobPosting.findUnique({
       where: { id: jobPostingId },
       select: { id: true, status: true, closingDate: true },
     });

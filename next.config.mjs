@@ -22,6 +22,16 @@ const nextConfig = {
       },
     ],
   },
+  webpack: (config, { dev, isServer }) => {
+    // Évite les race conditions sur Windows avec vendor-chunks en dev
+    if (dev && isServer) {
+      config.optimization = {
+        ...(config.optimization ?? {}),
+        splitChunks: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default withNextIntl(nextConfig);

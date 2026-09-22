@@ -14,14 +14,16 @@ import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ALLOWED_ADMIN_ROLES } from "@/auth.config";
+import { TeamRole } from "@prisma/client";
 import { 
   JobStatus, 
   EmploymentType, 
   SalaryType, 
   StaffRole, 
-  ApplicationStatus, 
-  TeamRole 
-} from "@prisma/client";
+  ApplicationStatus 
+} from "@/types/recruitment";
+
+const db = prisma as any;
 
 // ====================================================
 // VÉRIFICATION D'AUTHENTIFICATION ADMIN
@@ -68,7 +70,7 @@ export async function getPublicJobPostingsAction(filters?: {
       whereClause.location = { contains: filters.location, mode: "insensitive" };
     }
 
-    const jobs = await prisma.jobPosting.findMany({
+    const jobs = await db.jobPosting.findMany({
       where: whereClause,
       orderBy: [
         { publishedAt: "desc" },
@@ -96,7 +98,7 @@ export async function getPublicJobPostingsAction(filters?: {
     });
 
     // Extraire les listes uniques de filtres pour l'interface
-    const allPublished = await prisma.jobPosting.findMany({
+    const allPublished = await db.jobPosting.findMany({
       where: { status: "PUBLIEE" },
       select: { department: true, location: true },
     });
@@ -125,7 +127,7 @@ export async function getPublicJobPostingsAction(filters?: {
  */
 export async function getPublicJobPostingBySlugAction(slug: string) {
   try {
-    const job = await prisma.jobPosting.findUnique({
+    const job = await db.jobPosting.findUnique({
       where: { slug },
     });
 
@@ -134,7 +136,7 @@ export async function getPublicJobPostingBySlugAction(slug: string) {
     }
 
     // Récupérer 3 postes similaires
-    const similarJobs = await prisma.jobPosting.findMany({
+    const similarJobs = await db.jobPosting.findMany({
       where: {
         status: "PUBLIEE",
         id: { not: job.id },
@@ -207,7 +209,7 @@ export async function submitJobApplicationAction(data: {
 
     // 4. Rate-Limiting : maximum 3 candidatures par email sur les dernières 24 heures
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recentSubmissionsCount = await prisma.jobApplication.count({
+    const recentSubmissionsCount = await db.jobApplication.count({
       where: {
         email: data.email.trim().toLowerCase(),
         createdAt: { gte: oneDayAgo },
@@ -222,7 +224,7 @@ export async function submitJobApplicationAction(data: {
     }
 
     // 5. Vérifier que l'offre est bien ouverte
-    const job = await prisma.jobPosting.findUnique({
+    const job = await db.jobPosting.findUnique({
       where: { id: data.jobPostingId },
       select: { id: true, title: true, status: true, closingDate: true },
     });
@@ -245,7 +247,7 @@ export async function submitJobApplicationAction(data: {
     }
 
     // 7. Enregistrement transactionnel en base de données
-    const application = await prisma.jobApplication.create({
+    const application = await db.jobApplication.create({
       data: {
         jobPostingId: data.jobPostingId,
         fullName: data.fullName.trim(),
@@ -302,7 +304,7 @@ export async function subscribeJobAlertAction(email: string) {
       return { success: false, error: "Adresse email invalide." };
     }
 
-    await prisma.jobAlertSubscription.upsert({
+    await db.jobAlertSubscription.upsert({
       where: { email: cleanEmail },
       update: {},
       create: { email: cleanEmail },
@@ -337,7 +339,7 @@ export async function getAdminJobPostingsAction(filters?: {
       where.department = filters.department;
     }
 
-    const jobs = await prisma.jobPosting.findMany({
+    const jobs = await db.jobPosting.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: {
@@ -393,14 +395,14 @@ export async function createJobPostingAction(data: {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
 
-    let existing = await prisma.jobPosting.findUnique({ where: { slug: generatedSlug } });
+    let existing = await db.jobPosting.findUnique({ where: { slug: generatedSlug } });
     if (existing) {
       generatedSlug = `${generatedSlug}-${Date.now().toString().slice(-4)}`;
     }
 
     const isPublished = data.status === "PUBLIEE";
 
-    const job = await prisma.jobPosting.create({
+    const job = await db.jobPosting.create({
       data: {
         title: data.title.trim(),
         slug: generatedSlug,
@@ -459,7 +461,7 @@ export async function updateJobPostingAction(
   try {
     await checkAdminAuth();
 
-    const existing = await prisma.jobPosting.findUnique({ where: { id } });
+    const existing = await db.jobPosting.findUnique({ where: { id } });
     if (!existing) {
       return { success: false, error: "Offre introuvable." };
     }
@@ -489,14 +491,14 @@ export async function updateJobPostingAction(
 
     if (data.slug && data.slug !== existing.slug) {
       const cleanSlug = data.slug.toLowerCase().trim().replace(/[^a-z0-9-_]/g, "-");
-      const clash = await prisma.jobPosting.findUnique({ where: { slug: cleanSlug } });
+      const clash = await db.jobPosting.findUnique({ where: { slug: cleanSlug } });
       if (clash && clash.id !== id) {
         return { success: false, error: "Ce slug est déjà utilisé par une autre offre." };
       }
       updates.slug = cleanSlug;
     }
 
-    const updated = await prisma.jobPosting.update({
+    const updated = await db.jobPosting.update({
       where: { id },
       data: updates,
     });
@@ -518,7 +520,7 @@ export async function deleteJobPostingAction(id: string) {
   try {
     await checkAdminAuth();
 
-    const job = await prisma.jobPosting.findUnique({
+    const job = await db.jobPosting.findUnique({
       where: { id },
       include: { _count: { select: { applications: true } } },
     });
@@ -529,7 +531,7 @@ export async function deleteJobPostingAction(id: string) {
 
     // S'il existe des candidatures, on archive au lieu de supprimer brutalement
     if (job._count.applications > 0) {
-      await prisma.jobPosting.update({
+      await db.jobPosting.update({
         where: { id },
         data: { status: "ARCHIVEE" },
       });
@@ -540,7 +542,7 @@ export async function deleteJobPostingAction(id: string) {
       };
     }
 
-    await prisma.jobPosting.delete({ where: { id } });
+    await db.jobPosting.delete({ where: { id } });
     revalidatePath("/admin/recrutement/offres", "page");
 
     return { success: true, message: "Offre supprimée avec succès." };
@@ -578,7 +580,7 @@ export async function getAdminJobApplicationsAction(filters?: {
       ];
     }
 
-    const applications = await prisma.jobApplication.findMany({
+    const applications = await db.jobApplication.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: {
@@ -595,7 +597,7 @@ export async function getAdminJobApplicationsAction(filters?: {
     });
 
     // Statistiques par statut
-    const countsByStatus = await prisma.jobApplication.groupBy({
+    const countsByStatus = await db.jobApplication.groupBy({
       by: ["status"],
       _count: { _all: true },
     });
@@ -634,7 +636,7 @@ export async function updateJobApplicationStatusAction(
   try {
     await checkAdminAuth();
 
-    const application = await prisma.jobApplication.update({
+    const application = await db.jobApplication.update({
       where: { id },
       data: { status: newStatus },
       select: { id: true, status: true, fullName: true },
@@ -658,7 +660,7 @@ export async function updateJobApplicationNotesAndScoreAction(
   try {
     await checkAdminAuth();
 
-    const application = await prisma.jobApplication.update({
+    const application = await db.jobApplication.update({
       where: { id },
       data: {
         internalNotes: data.internalNotes !== undefined ? data.internalNotes.trim() : undefined,
@@ -682,7 +684,7 @@ export async function getSignedCvUrlAction(applicationId: string) {
   try {
     await checkAdminAuth();
 
-    const application = await prisma.jobApplication.findUnique({
+    const application = await db.jobApplication.findUnique({
       where: { id: applicationId },
       select: { cvFileUrl: true, cvFileName: true, fullName: true },
     });
@@ -711,7 +713,7 @@ export async function deleteJobApplicationAction(applicationId: string) {
   try {
     await checkAdminAuth();
 
-    const application = await prisma.jobApplication.findUnique({
+    const application = await db.jobApplication.findUnique({
       where: { id: applicationId },
       select: { id: true, cvFileUrl: true },
     });
@@ -727,7 +729,7 @@ export async function deleteJobApplicationAction(applicationId: string) {
       });
     }
 
-    await prisma.jobApplication.delete({ where: { id: applicationId } });
+    await db.jobApplication.delete({ where: { id: applicationId } });
 
     revalidatePath("/admin/recrutement/candidatures", "page");
     return { success: true, message: "Candidature et document supprimés définitivement." };
@@ -753,7 +755,7 @@ export async function convertApplicationToTeamMemberAction({
   try {
     await checkAdminAuth();
 
-    const application = await prisma.jobApplication.findUnique({
+    const application = await db.jobApplication.findUnique({
       where: { id: applicationId },
       include: { jobPosting: true },
     });
@@ -808,7 +810,7 @@ export async function convertApplicationToTeamMemberAction({
           isActive: true,
         },
       }),
-      prisma.jobApplication.update({
+      db.jobApplication.update({
         where: { id: applicationId },
         data: {
           status: "ACCEPTEE",

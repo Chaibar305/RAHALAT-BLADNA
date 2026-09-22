@@ -14,7 +14,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
 
     // Récupérer les offres d'emploi publiées
-    const jobs = await prisma.jobPosting.findMany({
+    const jobs = await (prisma as any).jobPosting.findMany({
       where: { status: "PUBLIEE" },
       select: { slug: true, updatedAt: true },
     });
