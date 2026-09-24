@@ -207,10 +207,6 @@ export async function getPresignedCvUploadUrl({
     Bucket: R2_BUCKET_NAME,
     Key: key,
     ContentType: "application/pdf",
-    Metadata: {
-      originalName: sanitizedFileName,
-      uploadedAt: new Date().toISOString(),
-    },
   });
 
   const uploadUrl = await getSignedUrl(r2Client, command, {

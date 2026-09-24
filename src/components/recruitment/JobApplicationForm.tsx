@@ -118,67 +118,97 @@ export function JobApplicationForm({ jobPostingId, jobTitle }: JobApplicationFor
     }
   };
 
-  // Upload direct vers Cloudflare R2 via URL présignée avec suivi XMLHttpRequest
+  // Upload vers Cloudflare R2 avec double stratégie (Direct R2 PUT + Fallback Serveur garanti)
   const uploadCvToR2 = async (file: File): Promise<{ key: string; sanitizedName: string }> => {
     setIsUploadingCv(true);
-    setUploadProgress(10);
+    setUploadProgress(15);
 
     const tempAppId = `app-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    // 1. Demande d'URL présignée
-    const presignedRes = await fetch("/api/recruitment/presigned-cv-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jobPostingId,
-        applicationId: tempAppId,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: "application/pdf",
-      }),
-    });
+    // Fonction de téléversement de secours via l'API serveur (aucun problème de CORS/réseau possible)
+    const fallbackServerUpload = async (): Promise<{ key: string; sanitizedName: string }> => {
+      setUploadProgress(40);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("jobPostingId", jobPostingId);
+      formData.append("applicationId", tempAppId);
 
-    const presignedData = await presignedRes.json();
-    if (!presignedRes.ok || !presignedData.success) {
-      throw new Error(presignedData.error || "Impossible d'initialiser le téléversement du CV.");
+      const serverRes = await fetch("/api/recruitment/upload-cv-direct", {
+        method: "POST",
+        body: formData,
+      });
+
+      const serverData = await serverRes.json();
+      if (!serverRes.ok || !serverData.success) {
+        throw new Error(serverData.error || (isAr ? "فشل تحميل السيرة الذاتية." : "Échec du téléversement du CV."));
+      }
+
+      setUploadProgress(100);
+      setIsUploadingCv(false);
+      setCvUploadedKey(serverData.key);
+      setCvSanitizedName(serverData.sanitizedFileName);
+      return { key: serverData.key, sanitizedName: serverData.sanitizedFileName };
+    };
+
+    try {
+      // 1. Demande d'URL présignée
+      const presignedRes = await fetch("/api/recruitment/presigned-cv-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobPostingId,
+          applicationId: tempAppId,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: "application/pdf",
+        }),
+      });
+
+      const presignedData = await presignedRes.json();
+      if (!presignedRes.ok || !presignedData.success || !presignedData.uploadUrl) {
+        // En cas d'erreur de presigned URL, bascule transparente sur le serveur
+        return await fallbackServerUpload();
+      }
+
+      const { uploadUrl, key, sanitizedFileName } = presignedData;
+
+      // 2. Upload binaire PUT direct vers Cloudflare R2
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/pdf");
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 85);
+            setUploadProgress(15 + percent);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setUploadProgress(100);
+            resolve();
+          } else {
+            reject(new Error(`R2 HTTP ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error("R2 XHR Network Error"));
+        };
+
+        xhr.send(file);
+      });
+
+      setIsUploadingCv(false);
+      setCvUploadedKey(key);
+      setCvSanitizedName(sanitizedFileName);
+      return { key, sanitizedName: sanitizedFileName };
+    } catch (directErr) {
+      console.warn("⚠️ [Upload CV] Téléversement direct R2 indisponible, bascule sur l'upload direct serveur :", directErr);
+      return await fallbackServerUpload();
     }
-
-    const { uploadUrl, key, sanitizedFileName } = presignedData;
-
-    // 2. Upload binaire PUT direct vers Cloudflare R2 avec suivi de progression
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", uploadUrl, true);
-      xhr.setRequestHeader("Content-Type", "application/pdf");
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 90);
-          setUploadProgress(10 + percent);
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setUploadProgress(100);
-          resolve();
-        } else {
-          reject(new Error(`Erreur lors du téléversement vers Cloudflare R2 (Code: ${xhr.status}).`));
-        }
-      };
-
-      xhr.onerror = () => {
-        reject(new Error("Erreur réseau pendant le téléversement du CV."));
-      };
-
-      xhr.send(file);
-    });
-
-    setIsUploadingCv(false);
-    setCvUploadedKey(key);
-    setCvSanitizedName(sanitizedFileName);
-
-    return { key, sanitizedName: sanitizedFileName };
   };
 
   // Soumission finale du formulaire
