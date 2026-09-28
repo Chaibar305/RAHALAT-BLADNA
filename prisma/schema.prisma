@@ -752,4 +752,34 @@ model JobAlertSubscription {
   @@index([email])
 }
 
+// ====================================================
+// BLOG & ARTICLES
+// ====================================================
+
+model BlogPost {
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  titleFr      String
+  titleAr      String?
+  titleEn      String?
+  excerptFr    String?   @db.Text
+  excerptAr    String?   @db.Text
+  excerptEn    String?   @db.Text
+  contentFr    String    @db.Text // HTML généré par l'éditeur TipTap
+  contentAr    String?   @db.Text
+  contentEn    String?   @db.Text
+  coverImage   String?   // URL photo de couverture principale
+  youtubeUrl   String?   // URL vidéo YouTube mise en avant
+  category     String    @default("Conseils & Guides")
+  authorName   String    @default("Équipe Rahalat Bladna")
+  isPublished  Boolean   @default(false)
+  viewsCount   Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([isPublished, createdAt])
+  @@index([category])
+}
+
+
 

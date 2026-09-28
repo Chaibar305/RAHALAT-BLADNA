@@ -14,7 +14,7 @@ import {
   PhoneCall, Sparkles, Menu, X, Compass,
   Briefcase, Star, ShieldCheck,
   LogIn, UserPlus, Ticket, LogOut, Home, Palmtree, MessageCircle,
-  Instagram, Facebook, UserCheck
+  Instagram, Facebook, UserCheck, BookOpen
 } from "lucide-react";
 
 export function Header() {
@@ -64,6 +64,7 @@ export function Header() {
     { href: `/${locale}`, label: t("home"), icon: Home },
     { href: `/${locale}#weekends`, label: t("weekendTrips"), icon: Palmtree },
     { href: `/${locale}/trips`, label: t("trips"), icon: Compass },
+    { href: `/${locale}/blog`, label: isAr ? "المدونة" : "Blog", icon: BookOpen },
     { href: `/${locale}#sur-mesure`, label: t("tailorMade"), icon: Sparkles },
     { href: `/${locale}#b2b`, label: t("b2b"), icon: Briefcase },
     { href: `/${locale}#avis`, label: t("reviews"), icon: Star },

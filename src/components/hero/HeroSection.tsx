@@ -13,7 +13,7 @@ export function HeroSection() {
   const isAr = locale === "ar";
 
   return (
-    <section className="relative min-h-[640px] lg:min-h-[760px] flex items-center justify-center bg-[#080d1a] text-white overflow-hidden py-16 sm:py-24 lg:py-32">
+    <section className="relative z-40 min-h-[640px] lg:min-h-[760px] flex items-center justify-center bg-[#080d1a] text-white py-16 sm:py-24 lg:py-32">
       {/* 1. Cinematic Hero Background Cover Photo (Atlas & Sahara Dunes) */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
         <motion.img

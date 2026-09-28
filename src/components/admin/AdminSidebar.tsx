@@ -10,7 +10,7 @@ import {
   LayoutDashboard, FileText, Ticket, Compass, 
   CreditCard, Settings, LogOut, ExternalLink, 
   ShieldCheck, ChevronRight, Menu, X, Bell, User, Users, Building2, QrCode, UserCheck,
-  Briefcase, UserPlus
+  Briefcase, UserPlus, Newspaper
 } from "lucide-react";
 import { getAdminSidebarCountsAction } from "@/actions/sidebar.actions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -111,6 +111,12 @@ export function AdminSidebar() {
       href: `/${locale}/admin/recrutement/candidatures`,
       icon: UserPlus,
       badge: counts.newApplicationsCount > 0 ? String(counts.newApplicationsCount) : null,
+    },
+    {
+      label: isAr ? "المقالات والمدونة" : "Blog & Articles",
+      href: `/${locale}/admin/blog`,
+      icon: Newspaper,
+      badge: null,
     },
     {
       label: isAr ? "إعدادات المنظومة والمستخدمين" : "Paramètres Généraux",
