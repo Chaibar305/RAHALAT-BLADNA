@@ -7,7 +7,7 @@ import {
   MapPin, Calendar, Clock, CheckCircle2, XCircle, 
   Sparkles, ArrowRight, ShieldCheck, Waves, BedDouble, Trees, 
   ChevronLeft, ChevronRight, MessageSquare, Compass, Hotel, Mountain,
-  Tent, Sun, Camera
+  Tent, Sun, Camera, Luggage
 } from "lucide-react";
 import { formatMAD } from "@/lib/utils";
 
@@ -390,14 +390,22 @@ export function UniversalTripShowcase({
   locale,
 }: UniversalTripShowcaseProps) {
   const isAr = locale === "ar";
+  const isEn = locale === "en";
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
 
   // 1. Récupération des métadonnées enrichies du circuit ou génération dynamique
   const curated = CURATED_TRIPS_METADATA[slug] || {};
 
-  const title = isAr ? (dbTrip?.titleAr || dbTrip?.titleFr) : (dbTrip?.titleFr || dbTrip?.titleAr);
+  const title = isAr 
+    ? (dbTrip?.titleAr || dbTrip?.titleFr) 
+    : isEn
+    ? (dbTrip?.titleEn || dbTrip?.titleFr)
+    : (dbTrip?.titleFr || dbTrip?.titleAr);
+
   const destination = isAr 
     ? (dbTrip?.destinationRegion || "المغرب") 
+    : isEn
+    ? (dbTrip?.destinationRegion || "Morocco")
     : (dbTrip?.destinationRegion || "Maroc");
 
   // Photos de la galerie
@@ -470,23 +478,35 @@ export function UniversalTripShowcase({
     ? dbTrip.itineraryDays.map((day: any) => {
         const dayNamesFr = ["Vendredi", "Samedi", "Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi"];
         const dayNamesAr = ["الجمعة", "السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس"];
+        const dayNamesEn = ["Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
         const dayIdx = (day.dayNumber - 1) % 7;
 
         return {
           day: day.dayNumber,
-          dayName: dayNamesFr[dayIdx],
-          dayNameAr: dayNamesAr[dayIdx],
-          title: isAr ? (day.titleAr || day.titleFr) : (day.titleFr || day.titleAr),
-          desc: isAr ? (day.descriptionAr || day.descriptionFr) : (day.descriptionFr || day.descriptionAr),
+          dayName: isAr ? dayNamesAr[dayIdx] : isEn ? dayNamesEn[dayIdx] : dayNamesFr[dayIdx],
+          title: isAr 
+            ? (day.titleAr || day.titleFr) 
+            : isEn
+            ? (day.titleEn || day.titleFr)
+            : (day.titleFr || day.titleAr),
+          desc: isAr 
+            ? (day.descriptionAr || day.descriptionFr) 
+            : isEn
+            ? (day.descriptionEn || day.descriptionFr)
+            : (day.descriptionFr || day.descriptionAr),
           activities: day.activityTags && day.activityTags.length > 0 ? day.activityTags : [day.location || "Visite & Activités"],
         };
       })
     : [
         {
           day: 1,
-          dayName: isAr ? "اليوم الأول" : "Jour 1",
-          title: isAr ? "الانطلاق والاستقرار" : "Départ & Installation",
-          desc: isAr ? "الانطلاق بالحافلة السياحية والوصول لمكان الإقامة والاسترخاء." : "Départ confortable, accueil et installation à l'hébergement.",
+          dayName: isAr ? "اليوم الأول" : isEn ? "Day 1" : "Jour 1",
+          title: isAr ? "الانطلاق والاستقرار" : isEn ? "Departure & Check-in" : "Départ & Installation",
+          desc: isAr 
+            ? "الانطلاق بالحافلة السياحية والوصول لمكان الإقامة والاسترخاء." 
+            : isEn
+            ? "Comfortable tourist coach departure, welcoming arrival and check-in."
+            : "Départ confortable, accueil et installation à l'hébergement.",
           activities: ["Départ", "Installation", "Repos"],
         },
       ];
@@ -496,6 +516,10 @@ export function UniversalTripShowcase({
     ? ((dbTrip?.includedServicesAr && dbTrip.includedServicesAr.length > 0) 
         ? dbTrip.includedServicesAr 
         : (dbTrip?.includedServicesFr || ["نقل سياحي مريح", "إقامة في النزل", "تأطير محترف"]))
+    : isEn
+    ? ((dbTrip?.includedServicesEn && dbTrip.includedServicesEn.length > 0)
+        ? dbTrip.includedServicesEn
+        : (dbTrip?.includedServicesFr || ["Comfortable air-conditioned transport", "Selected accommodation", "Professional guidance"]))
     : ((dbTrip?.includedServicesFr && dbTrip.includedServicesFr.length > 0)
         ? dbTrip.includedServicesFr
         : ["Transport touristique climatisé grand confort A/R", "Hébergement sélectionné", "Encadrement professionnel"]);
@@ -504,9 +528,26 @@ export function UniversalTripShowcase({
     ? ((dbTrip?.excludedServicesAr && dbTrip.excludedServicesAr.length > 0)
         ? dbTrip.excludedServicesAr
         : (dbTrip?.excludedServicesFr || ["المصاريف الشخصية", "الوجبات غير المذكورة"]))
+    : isEn
+    ? ((dbTrip?.excludedServicesEn && dbTrip.excludedServicesEn.length > 0)
+        ? dbTrip.excludedServicesEn
+        : (dbTrip?.excludedServicesFr || ["Personal expenses and gratuities", "Free lunches not mentioned"]))
     : ((dbTrip?.excludedServicesFr && dbTrip.excludedServicesFr.length > 0)
         ? dbTrip.excludedServicesFr
         : ["Dépenses personnelles et pourboires", "Repas libres non mentionnés"]);
+
+  // Checklist (Équipements & Documents à apporter)
+  const checklistList: string[] = isAr
+    ? ((dbTrip?.checklistItemsAr && dbTrip.checklistItemsAr.length > 0)
+        ? dbTrip.checklistItemsAr
+        : (dbTrip?.checklistItemsFr?.length > 0 ? dbTrip.checklistItemsFr : []))
+    : isEn
+    ? ((dbTrip?.checklistItemsEn && dbTrip.checklistItemsEn.length > 0)
+        ? dbTrip.checklistItemsEn
+        : (dbTrip?.checklistItemsFr?.length > 0 ? dbTrip.checklistItemsFr : []))
+    : ((dbTrip?.checklistItemsFr && dbTrip.checklistItemsFr.length > 0)
+        ? dbTrip.checklistItemsFr
+        : []);
 
   // Prix
   const basePrice = Number(dbTrip?.basePrice || 1200);
@@ -566,7 +607,7 @@ export function UniversalTripShowcase({
           {/* Badge Prix & Acompte Terracotta */}
           <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 sm:p-5 flex flex-col items-start md:items-end justify-center shrink-0">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-              {isAr ? "سعر الرحلة المضمون" : "Tarif Évasion Garanti"}
+              {isAr ? "سعر الرحلة المضمون" : isEn ? "Guaranteed Tour Price" : "Tarif Évasion Garanti"}
             </span>
             <div className="flex items-baseline gap-2 mt-0.5">
               <span className="text-sm line-through text-slate-400 font-semibold">
@@ -576,17 +617,19 @@ export function UniversalTripShowcase({
                 {formatMAD(basePrice, locale)}
               </span>
               <span className="text-xs text-slate-300">
-                {isAr ? "/ مسافر" : "/ pers"}
+                {isAr ? "/ مسافر" : isEn ? "/ person" : "/ pers"}
               </span>
             </div>
             <span className="text-[11px] font-bold text-emerald-300 mt-1 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
               {isAr 
                 ? `التسبيق: ${formatMAD(deposit, locale)} فقط` 
+                : isEn
+                ? `Deposit: ${formatMAD(deposit, locale)} only`
                 : `Acompte requis : ${formatMAD(deposit, locale)}`}
             </span>
             <span className="text-[10px] font-bold text-amber-300 mt-0.5">
-              {isAr ? "تخفيض استثنائي ابتداءً من 3 أشخاص" : "Remise spéciale à partir de 3 personnes"}
+              {isAr ? "تخفيض استثنائي ابتداءً من 3 أشخاص" : isEn ? "Special group discount from 3+ travelers" : "Remise spéciale à partir de 3 personnes"}
             </span>
           </div>
         </div>
@@ -594,14 +637,34 @@ export function UniversalTripShowcase({
 
       {/* 2. CORPS DE PRÉSENTATION : GALERIE PHOTOS, HÉBERGEMENT & ITINÉRAIRE */}
       <div className="p-6 sm:p-8 space-y-8">
-        
+        {/* Aperçu du voyage & Philosophie (Storytelling & Vision) */}
+        {(dbTrip?.showOverview ?? true) && (
+          <div className="p-6 rounded-2xl bg-gradient-to-br from-[#073B5C]/5 via-white to-[#2E6B57]/5 border border-[#073B5C]/15 space-y-2.5 shadow-xs">
+            <h3 className="text-base font-black text-[#073B5C] flex items-center gap-2">
+              <Compass className="w-5 h-5 text-[#D9683A]" />
+              <span>
+                {isAr ? "نظرة عامة وفلسفة التجربة" : isEn ? "Overview & Experience Philosophy" : "Aperçu du Voyage & Philosophie"}
+              </span>
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-line">
+              {isAr
+                ? (dbTrip?.overviewAr || dbTrip?.longDescriptionAr || dbTrip?.shortDescriptionAr || dbTrip?.overviewFr)
+                : isEn
+                ? (dbTrip?.overviewEn || dbTrip?.longDescriptionEn || dbTrip?.shortDescriptionEn || dbTrip?.overviewFr)
+                : (dbTrip?.overviewFr || dbTrip?.longDescriptionFr || dbTrip?.shortDescriptionFr)}
+            </p>
+          </div>
+        )}
+
         {/* A. VISUAL CAROUSEL AVEC LES PHOTOS OFFICIELLES DU CIRCUIT */}
         {photos.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-[#073B5C] flex items-center gap-2">
                 <Camera className="w-5 h-5 text-[#2E6B57]" />
-                <span>{isAr ? "ألبوم الصور الحصرية للرحلة والتجربة" : "Photos Officielles de l'Expérience & des Étapes"}</span>
+                <span>
+                  {isAr ? "ألبوم الصور الحصرية للرحلة والتجربة" : isEn ? "Official Tour & Experience Photos" : "Photos Officielles de l'Expérience & des Étapes"}
+                </span>
               </h3>
               <span className="text-xs font-bold text-slate-500">
                 {activePhotoIdx + 1} / {photos.length}
@@ -800,7 +863,9 @@ export function UniversalTripShowcase({
         <div className="space-y-4">
           <h3 className="text-lg font-black text-[#073B5C] flex items-center gap-2">
             <Calendar className="w-5 h-5 text-[#D9683A]" />
-            <span>{isAr ? "البرنامج المفصل للرحلة يوماً بعد يوم" : "Programme Chronologique du Séjour"}</span>
+            <span>
+              {isAr ? "البرنامج المفصل للرحلة يوماً بعد يوم" : isEn ? "Detailed Day-by-Day Itinerary" : "Programme Chronologique du Séjour"}
+            </span>
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -812,7 +877,7 @@ export function UniversalTripShowcase({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-[#073B5C] text-white">
-                      {isAr ? `اليوم ${step.day}` : `Jour ${step.day}`}
+                      {isAr ? `اليوم ${step.day}` : isEn ? `Day ${step.day}` : `Jour ${step.day}`}
                     </span>
                     <span className="text-[11px] font-bold text-[#2E6B57]">
                       {isAr ? (step.dayNameAr || step.dayName) : step.dayName}
@@ -849,7 +914,9 @@ export function UniversalTripShowcase({
           <div className="space-y-3">
             <h4 className="text-sm font-black text-[#2E6B57] flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isAr ? "الخدمات والمصاريف المشمولة بالرحلة :" : "Ce qui est inclus dans le tarif :"}</span>
+              <span>
+                {isAr ? "الخدمات والمصاريف المشمولة بالرحلة :" : isEn ? "Included in the Tour Package :" : "Ce qui est inclus dans le tarif :"}
+              </span>
             </h4>
             <ul className="space-y-2 text-xs text-slate-700">
               {includedList.map((item: string, idx: number) => (
@@ -865,7 +932,9 @@ export function UniversalTripShowcase({
           <div className="space-y-3">
             <h4 className="text-sm font-black text-[#D9683A] flex items-center gap-2">
               <XCircle className="w-4 h-4" />
-              <span>{isAr ? "غير مشمول في السعر :" : "Non inclus :"}</span>
+              <span>
+                {isAr ? "غير مشمول في السعر :" : isEn ? "Not Included :" : "Non inclus :"}
+              </span>
             </h4>
             <ul className="space-y-2 text-xs text-slate-600">
               {excludedList.map((item: string, idx: number) => (
@@ -878,18 +947,40 @@ export function UniversalTripShowcase({
           </div>
         </div>
 
-        {/* E. CTA FINAL & BANDEAU DE RÉSERVATION */}
+        {/* E. CHECKLIST — QUE FAUT-IL APPORTER ? */}
+        {checklistList.length > 0 && (
+          <div className="bg-amber-50/60 rounded-2xl p-5 sm:p-6 border border-amber-200/60 space-y-3">
+            <h4 className="text-sm font-black text-amber-800 flex items-center gap-2">
+              <Luggage className="w-4 h-4 text-amber-600" />
+              <span>
+                {isAr ? "ماذا تأخذ معك في الرحلة ؟" : isEn ? "What to bring with you?" : "Que faut-il apporter avec vous ?"}
+              </span>
+            </h4>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-slate-700">
+              {checklistList.map((item: string, idx: number) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="mt-0.5 w-4 h-4 rounded bg-amber-200/70 text-amber-800 text-[10px] font-black flex items-center justify-center shrink-0">{idx + 1}</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* F. CTA FINAL & BANDEAU DE RÉSERVATION */}
         <div className="p-6 rounded-2xl bg-gradient-to-r from-[#073B5C] via-[#073B5C] to-[#2E6B57] text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
           <div className="space-y-1 text-center sm:text-start">
             <span className="text-[11px] font-bold uppercase tracking-widest text-[#D9683A] block">
-              {isAr ? "مقاعد محدودة · حجز فوري ومؤكد" : "Départs Garantis · Places Limitées"}
+              {isAr ? "مقاعد محدودة · حجز فوري ومؤكد" : isEn ? "Guaranteed Departures · Limited Seats" : "Départs Garantis · Places Limitées"}
             </span>
             <h3 className="text-xl sm:text-2xl font-black">
-              {isAr ? "هل أنت مستعد لخوض هذه المغامرة الساحرة ؟" : "Prêt pour une Évasion Inoubliable ?"}
+              {isAr ? "هل أنت مستعد لخوض هذه المغامرة الساحرة ؟" : isEn ? "Ready for an Unforgettable Escape?" : "Prêt pour une Évasion Inoubliable ?"}
             </h3>
             <p className="text-xs text-slate-200">
               {isAr
                 ? `${formatMAD(basePrice, locale)} فقط عوض ${formatMAD(regularPrice, locale)} · تسبيق ${formatMAD(deposit, locale)} فقط لتأكيد المقعد`
+                : isEn
+                ? `${formatMAD(basePrice, locale)} instead of ${formatMAD(regularPrice, locale)} · Only ${formatMAD(deposit, locale)} deposit to secure your seat`
                 : `${formatMAD(basePrice, locale)} au lieu de ${formatMAD(regularPrice, locale)} · Acompte de ${formatMAD(deposit, locale)} seulement`}
             </p>
           </div>
@@ -900,7 +991,7 @@ export function UniversalTripShowcase({
               onClick={handleBooking}
               className="px-7 py-3.5 rounded-xl bg-gradient-to-r from-[#D9683A] to-amber-600 hover:from-amber-600 hover:to-[#D9683A] text-white text-xs sm:text-sm font-black shadow-lg shadow-[#D9683A]/30 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
             >
-              <span>{isAr ? "احجز مقعدك الآن" : "Réserver ma place"}</span>
+              <span>{isAr ? "احجز مقعدك الآن" : isEn ? "Book Your Seat Now" : "Réserver ma place"}</span>
               <ArrowRight className="w-4 h-4 rtl:rotate-180" />
             </button>
 

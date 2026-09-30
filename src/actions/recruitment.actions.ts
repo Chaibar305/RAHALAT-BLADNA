@@ -782,8 +782,8 @@ export async function convertApplicationToTeamMemberAction({
     }
 
     // Définir les permissions adaptées au rôle
-    const canScanTickets = ["SUPER_ADMIN", "TOUR_LEADER", "OFFICIAL_GUIDE"].includes(targetRole);
-    const canViewManifest = ["SUPER_ADMIN", "ORGANIZER", "TOUR_LEADER", "OFFICIAL_GUIDE"].includes(targetRole);
+    const canScanTickets = ["SUPER_ADMIN", "TOUR_LEADER", "OFFICIAL_GUIDE", "DRIVER", "PRO_DRIVER"].includes(targetRole);
+    const canViewManifest = ["SUPER_ADMIN", "ORGANIZER", "TOUR_LEADER", "OFFICIAL_GUIDE", "CONFIRMATION_AGENT", "PHOTOGRAPHER_VIDEOGRAPHER"].includes(targetRole);
     const canCollectCash = ["SUPER_ADMIN", "TOUR_LEADER"].includes(targetRole);
     const canEditTrips = ["SUPER_ADMIN", "ORGANIZER"].includes(targetRole);
 

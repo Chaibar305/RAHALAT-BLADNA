@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { TipTapEditor } from '@/components/blog/TipTapEditor';
 import { createBlogPostAction, updateBlogPostAction } from '@/actions/blog.actions';
+import { R2ImageUploader } from '@/components/admin/R2ImageUploader';
 
 const BLOG_CATEGORIES = [
   'Conseils & Guides',
@@ -523,25 +524,29 @@ export function BlogPostForm({ initialData, isEdit = false }: BlogPostFormProps)
             </div>
           </div>
 
-          {/* Card Photo de Couverture */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl p-5 shadow-xs space-y-3.5">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Image de Couverture</span>
-            </h4>
-
-            <div>
-              <input
-                type="url"
-                placeholder="https://images.unsplash.com/... ou URL image"
-                value={coverImage}
-                onChange={(e) => setCoverImage(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500"
-              />
+          {/* Card Photo de Couverture avec Upload Cloudflare R2 */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Image de Couverture</span>
+              </h4>
+              <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono bg-cyan-50 dark:bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800">
+                Cloudflare R2 Direct
+              </span>
             </div>
 
+            {/* Téléverseur R2 officiel avec Drag & Drop */}
+            <R2ImageUploader
+              value={coverImage}
+              onChange={(url) => setCoverImage(url)}
+              folder="blog"
+              aspectRatio="video"
+              label=""
+            />
+
             {/* Presets rapides d'images pour tests immédiats */}
-            <div>
+            <div className="pt-2 border-t border-slate-100 dark:border-white/5">
               <span className="block text-[10px] font-bold text-slate-400 mb-1.5">
                 Ou choisir une photo type Maroc :
               </span>
@@ -558,31 +563,6 @@ export function BlogPostForm({ initialData, isEdit = false }: BlogPostFormProps)
                 ))}
               </div>
             </div>
-
-            {/* Aperçu de la couverture */}
-            {coverImage ? (
-              <div className="relative rounded-2xl overflow-hidden aspect-video border border-slate-200 dark:border-white/10 shadow-inner group">
-                <img
-                  src={coverImage}
-                  alt="Aperçu couverture"
-                  className="w-full h-full object-cover"
-                  onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setCoverImage('')}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-950/70 text-white hover:bg-rose-600 transition"
-                  title="Supprimer la photo"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 aspect-video flex flex-col items-center justify-center text-slate-400 gap-1.5 p-4 text-center">
-                <ImageIcon className="w-6 h-6 opacity-40" />
-                <span className="text-[11px] font-medium">Aucune photo de couverture sélectionnée</span>
-              </div>
-            )}
           </div>
 
           {/* Card Vidéo YouTube Mise en Avant */}

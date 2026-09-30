@@ -226,6 +226,70 @@ export const authOptions: NextAuthOptions = {
         if (session.role !== undefined) token.role = session.role;
       }
 
+      // 3. Vérifier systématiquement si l'utilisateur connecté possède une fiche TeamMember active
+      const userIdOrEmail = (token.id as string) || (token.email as string);
+      if (userIdOrEmail) {
+        try {
+          const teamProfile: any = await (prisma.teamMember as any).findFirst({
+            where: {
+              OR: [
+                ...(token.id ? [{ userId: token.id as string }] : []),
+                ...(token.email ? [{ email: { equals: token.email, mode: "insensitive" as const } }] : []),
+              ],
+              isActive: true,
+            },
+          });
+
+          if (teamProfile) {
+            token.isStaff = true;
+            token.teamRole = teamProfile.role;
+            token.teamMemberId = teamProfile.id;
+            
+            const permsList = Array.isArray(teamProfile.permissions) ? [...teamProfile.permissions] : [];
+            if (teamProfile.canScanTickets && !permsList.includes("SCANNER_QR")) permsList.push("SCANNER_QR");
+            if (teamProfile.canViewManifest && !permsList.includes("VIEW_MANIFEST")) permsList.push("VIEW_MANIFEST");
+            if (teamProfile.canCollectCash && !permsList.includes("COLLECT_CASH")) permsList.push("COLLECT_CASH");
+            if (teamProfile.canEditTrips && !permsList.includes("EDIT_TRIPS")) permsList.push("EDIT_TRIPS");
+            if (teamProfile.canManageBookings && !permsList.includes("MANAGE_BOOKINGS")) permsList.push("MANAGE_BOOKINGS");
+            if (teamProfile.canViewAnalytics && !permsList.includes("VIEW_ANALYTICS")) permsList.push("VIEW_ANALYTICS");
+            if (teamProfile.canManageBlog && !permsList.includes("MANAGE_BLOG")) permsList.push("MANAGE_BLOG");
+            if (teamProfile.canManageFinances && !permsList.includes("MANAGE_FINANCES")) permsList.push("MANAGE_FINANCES");
+
+            token.permissions = {
+              canScanTickets: teamProfile.canScanTickets,
+              canViewManifest: teamProfile.canViewManifest,
+              canCollectCash: teamProfile.canCollectCash,
+              canEditTrips: teamProfile.canEditTrips,
+              canManageBookings: teamProfile.canManageBookings,
+              canViewAnalytics: teamProfile.canViewAnalytics,
+              canManageBlog: teamProfile.canManageBlog,
+              canManageFinances: teamProfile.canManageFinances,
+              list: permsList,
+            };
+
+            // Ajuster token.role si encore à CLIENT
+            if (!token.role || token.role === "CLIENT") {
+              if (teamProfile.role === "SUPER_ADMIN") {
+                token.role = "SUPER_ADMIN";
+              } else if (teamProfile.role === "ORGANIZER") {
+                token.role = "AGENCY_ADMIN";
+              } else if (teamProfile.role === "TOUR_LEADER") {
+                token.role = "TOUR_LEADER";
+              } else {
+                token.role = "STAFF";
+              }
+            }
+          } else {
+            token.isStaff = false;
+            token.teamRole = null;
+            token.teamMemberId = null;
+            token.permissions = null;
+          }
+        } catch (err) {
+          console.error("[Auth.js] Erreur de vérification profil collaborateur:", err);
+        }
+      }
+
       return token;
     },
 
@@ -236,6 +300,10 @@ export const authOptions: NextAuthOptions = {
         session.user.phone = (token.phone as string) || null;
         session.user.cinOrPassport = (token.cinOrPassport as string) || null;
         session.user.isProfileComplete = (token.isProfileComplete as boolean) || false;
+        session.user.isStaff = !!token.isStaff;
+        session.user.teamRole = (token.teamRole as string) || null;
+        session.user.teamMemberId = (token.teamMemberId as string) || null;
+        session.user.permissions = (token.permissions as any) || null;
       }
       return session;
     },

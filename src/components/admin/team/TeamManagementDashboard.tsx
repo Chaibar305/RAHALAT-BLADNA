@@ -28,6 +28,9 @@ import {
   RotateCcw,
   Sparkles,
   Link2,
+  PhoneCall,
+  Megaphone,
+  Video,
 } from "lucide-react";
 import { TeamRole } from "@/types/enums";
 import { TeamMemberModal } from "./TeamMemberModal";
@@ -87,15 +90,18 @@ interface TeamManagementDashboardProps {
     role: string;
     teamMember: { id: string; fullName: string } | null;
   }>;
+  isSuperAdmin?: boolean;
 }
 
 export function TeamManagementDashboard({
   initialMembers,
   stats: initialStats,
   availableUsers,
+  isSuperAdmin = false,
 }: TeamManagementDashboardProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
+  const isEn = locale === "en";
 
   const [members, setMembers] = useState<TeamMemberItem[]>(initialMembers);
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,8 +143,12 @@ export function TeamManagementDashboard({
       }
 
       // 2. Filtre Rôle
-      if (selectedRole !== "ALL" && m.role !== selectedRole) {
-        return false;
+      if (selectedRole !== "ALL") {
+        if (selectedRole === "DRIVER" && (m.role === "DRIVER" || (m.role as any) === "PRO_DRIVER")) {
+          // match Driver
+        } else if (m.role !== selectedRole) {
+          return false;
+        }
       }
 
       // 3. Filtre Statut
@@ -157,6 +167,27 @@ export function TeamManagementDashboard({
 
   // Activation / Suspension immédiate
   const handleToggleStatus = async (id: string) => {
+    const targetMember = members.find((m) => m.id === id);
+    if (targetMember?.role === "SUPER_ADMIN") {
+      showNotification(
+        "error",
+        isAr
+          ? "أمان : لا يمكن أبداً تعليق حساب المشرف العام"
+          : "Sécurité : Le compte Super Admin ne peut jamais être suspendu."
+      );
+      return;
+    }
+
+    if (!isSuperAdmin) {
+      showNotification(
+        "error",
+        isAr
+          ? "إجراء غير مصرح : صلاحيات المشرف العام مطلوبة"
+          : "Action non autorisée : Privilèges Super Admin requis."
+      );
+      return;
+    }
+
     try {
       const res = await toggleTeamMemberStatusAction(id);
       if (res.success) {
@@ -182,7 +213,27 @@ export function TeamManagementDashboard({
   };
 
   // Suppression d'un membre
-  const handleDeleteMember = async (id: string, name: string) => {
+  const handleDeleteMember = async (id: string, name: string, role?: TeamRole) => {
+    if (role === "SUPER_ADMIN") {
+      showNotification(
+        "error",
+        isAr
+          ? "أمان : لا يمكن حذف حساب المشرف العام"
+          : "Sécurité : Le compte Super Admin ne peut pas être supprimé."
+      );
+      return;
+    }
+
+    if (!isSuperAdmin) {
+      showNotification(
+        "error",
+        isAr
+          ? "إجراء غير مصرح : صلاحيات المشرف العام مطلوبة"
+          : "Action non autorisée : Privilèges Super Admin requis."
+      );
+      return;
+    }
+
     if (
       !confirm(
         isAr
@@ -217,6 +268,15 @@ export function TeamManagementDashboard({
 
   // Ouvrir modal pour modification
   const handleOpenEditModal = (member: TeamMemberItem) => {
+    if (member.role === "SUPER_ADMIN" && !isSuperAdmin) {
+      showNotification(
+        "error",
+        isAr
+          ? "إجراء غير مصرح : تعديل حساب المشرف العام متاح للمشرف العام فقط"
+          : "Action non autorisée : Seul un Super Admin peut modifier le compte Super Admin."
+      );
+      return;
+    }
     setEditingMember(member);
     setIsModalOpen(true);
   };
@@ -225,33 +285,52 @@ export function TeamManagementDashboard({
     switch (role) {
       case "SUPER_ADMIN":
         return {
-          label: "Super Admin",
+          label: isAr ? "مشرف عام" : isEn ? "Super Admin" : "Super Admin",
           icon: ShieldCheck,
           color: "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-400",
         };
       case "ORGANIZER":
         return {
-          label: isAr ? "منظم" : "Organisateur",
+          label: isAr ? "منظم" : isEn ? "Organizer" : "Organisateur",
           icon: Compass,
           color: "bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-400",
         };
       case "TOUR_LEADER":
         return {
-          label: isAr ? "رئيس رحلة" : "Tour Leader",
+          label: isAr ? "رئيس رحلة" : isEn ? "Tour Leader" : "Tour Leader",
           icon: Users,
           color: "bg-cyan-500/10 border-cyan-500/30 text-cyan-700 dark:text-cyan-400",
         };
       case "OFFICIAL_GUIDE":
         return {
-          label: isAr ? "مرشد معتمد" : "Guide Officiel",
+          label: isAr ? "مرشد معتمد" : isEn ? "Official Guide" : "Guide Officiel",
           icon: Award,
           color: "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400",
         };
       case "DRIVER":
+      case "PRO_DRIVER" as any:
         return {
-          label: isAr ? "سائق نقل سياحي" : "Chauffeur",
+          label: isAr ? "سائق نقل سياحي" : isEn ? "Pro Driver" : "Chauffeur Pro",
           icon: Bus,
           color: "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-400",
+        };
+      case "CONFIRMATION_AGENT":
+        return {
+          label: isAr ? "عون تأكيد هاتفي" : isEn ? "Confirmation Agent" : "Agent Confirmation",
+          icon: PhoneCall,
+          color: "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400",
+        };
+      case "MEDIA_BUYER":
+        return {
+          label: isAr ? "مسؤول إعلانات" : isEn ? "Media Buyer" : "Media Buyer",
+          icon: Megaphone,
+          color: "bg-violet-500/10 border-violet-500/30 text-violet-700 dark:text-violet-400",
+        };
+      case "PHOTOGRAPHER_VIDEOGRAPHER":
+        return {
+          label: isAr ? "مصور / فيديو" : isEn ? "Photographer & Video" : "Photographe / Vidéo",
+          icon: Video,
+          color: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-700 dark:text-fuchsia-400",
         };
       default:
         return {
@@ -436,12 +515,15 @@ export function TeamManagementDashboard({
             onChange={(e) => setSelectedRole(e.target.value)}
             className="w-full md:w-auto px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-xs font-bold outline-none focus:border-cyan-500 transition"
           >
-            <option value="ALL">{isAr ? "جميع الأدوار" : "Tous les Rôles"}</option>
-            <option value="SUPER_ADMIN">Super Admin</option>
-            <option value="ORGANIZER">Organisateur</option>
-            <option value="TOUR_LEADER">Tour Leader</option>
-            <option value="OFFICIAL_GUIDE">Guide Officiel</option>
-            <option value="DRIVER">Chauffeur</option>
+            <option value="ALL">{isAr ? "جميع الأدوار" : isEn ? "All Roles" : "Tous les Rôles"}</option>
+            <option value="SUPER_ADMIN">{isAr ? "مشرف عام" : isEn ? "Super Admin" : "Super Admin"}</option>
+            <option value="ORGANIZER">{isAr ? "منظم رحلات" : isEn ? "Organizer" : "Organisateur"}</option>
+            <option value="TOUR_LEADER">{isAr ? "رئيس رحلة" : isEn ? "Tour Leader" : "Tour Leader"}</option>
+            <option value="OFFICIAL_GUIDE">{isAr ? "مرشد معتمد" : isEn ? "Official Guide" : "Guide Officiel"}</option>
+            <option value="DRIVER">{isAr ? "سائق نقل سياحي" : isEn ? "Pro Driver" : "Chauffeur Pro"}</option>
+            <option value="CONFIRMATION_AGENT">{isAr ? "عون تأكيد هاتفي" : isEn ? "Confirmation Agent" : "Agent de Confirmation"}</option>
+            <option value="MEDIA_BUYER">{isAr ? "مسؤول إعلانات" : isEn ? "Media Buyer" : "Media Buyer / Ads"}</option>
+            <option value="PHOTOGRAPHER_VIDEOGRAPHER">{isAr ? "مصور / فيديو" : isEn ? "Photographer & Video" : "Photographe / Vidéaste"}</option>
           </select>
 
           {/* Status Filter */}
@@ -711,12 +793,21 @@ export function TeamManagementDashboard({
                     </span>
                     <button
                       type="button"
+                      disabled={member.role === "SUPER_ADMIN" || !isSuperAdmin}
                       onClick={() => handleToggleStatus(member.id)}
                       className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none ${
-                        member.isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
+                        member.role === "SUPER_ADMIN" || !isSuperAdmin
+                          ? "bg-emerald-500/50 opacity-60 cursor-not-allowed"
+                          : member.isActive
+                          ? "bg-emerald-500 cursor-pointer"
+                          : "bg-slate-300 dark:bg-slate-700 cursor-pointer"
                       }`}
                       title={
-                        member.isActive
+                        member.role === "SUPER_ADMIN"
+                          ? "Sécurité : Le compte Super Admin ne peut jamais être suspendu"
+                          : !isSuperAdmin
+                          ? "Action réservée aux Super Admins"
+                          : member.isActive
                           ? "Suspendre immédiatement le compte"
                           : "Réactiver le compte"
                       }
@@ -733,16 +824,37 @@ export function TeamManagementDashboard({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleOpenEditModal(member)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
+                      disabled={member.role === "SUPER_ADMIN" && !isSuperAdmin}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
+                        member.role === "SUPER_ADMIN" && !isSuperAdmin
+                          ? "border-slate-200 dark:border-slate-800 text-slate-400 opacity-40 cursor-not-allowed"
+                          : "border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}
+                      title={
+                        member.role === "SUPER_ADMIN" && !isSuperAdmin
+                          ? "Modification réservée au Super Admin"
+                          : isAr ? "تعديل" : "Modifier"
+                      }
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>{isAr ? "تعديل" : "Modifier"}</span>
                     </button>
 
                     <button
-                      onClick={() => handleDeleteMember(member.id, member.fullName)}
-                      className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
-                      title={isAr ? "حذف العضو" : "Supprimer"}
+                      onClick={() => handleDeleteMember(member.id, member.fullName, member.role)}
+                      disabled={member.role === "SUPER_ADMIN" || !isSuperAdmin}
+                      className={`p-1.5 rounded-xl border transition ${
+                        member.role === "SUPER_ADMIN" || !isSuperAdmin
+                          ? "border-slate-200 dark:border-slate-800 text-slate-400 opacity-30 cursor-not-allowed"
+                          : "border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                      }`}
+                      title={
+                        member.role === "SUPER_ADMIN"
+                          ? "Sécurité : Le compte Super Admin ne peut pas être supprimé"
+                          : !isSuperAdmin
+                          ? "Suppression réservée au Super Admin"
+                          : isAr ? "حذف العضو" : "Supprimer"
+                      }
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -760,6 +872,7 @@ export function TeamManagementDashboard({
         onClose={() => setIsModalOpen(false)}
         editingMember={editingMember}
         availableUsers={availableUsers}
+        isSuperAdmin={isSuperAdmin}
         onSuccess={() => {
           showNotification(
             "success",

@@ -9,7 +9,7 @@ import {
   Sparkles, Image as ImageIcon, MapPin, Calendar, 
   DollarSign, CheckCircle2, AlertCircle, Eye, BedDouble, 
   Bus, Tag, UtensilsCrossed, ShieldCheck, Clock, Layers, Navigation,
-  Check, X, Luggage, Flame, Compass
+  Check, X, Luggage, Flame, Compass, Copy, Languages, Globe
 } from "lucide-react";
 import { TripFormData, ItineraryDayData, DepartureDateAdminData, PickupPointAdminData } from "@/lib/validations/trip.schema";
 import { createTripAction, updateTripAction } from "@/actions/trip.actions";
@@ -49,14 +49,19 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
     coverImageUrl: initialData?.coverImageUrl || "/images/merzouga/cover-merzouga.jpg",
     shortDescriptionFr: initialData?.shortDescriptionFr || "Immersion féerique dans les plus hautes dunes du Sahara marocain.",
     shortDescriptionAr: initialData?.shortDescriptionAr || "",
+    shortDescriptionEn: initialData?.shortDescriptionEn || "",
     longDescriptionFr: initialData?.longDescriptionFr || initialData?.overviewFr || "",
     longDescriptionAr: initialData?.longDescriptionAr || initialData?.overviewAr || "",
+    longDescriptionEn: initialData?.longDescriptionEn || initialData?.overviewEn || "",
     overviewFr: initialData?.overviewFr?.trim() 
       ? initialData.overviewFr 
       : (initialData?.longDescriptionFr || initialData?.shortDescriptionFr || ""),
     overviewAr: initialData?.overviewAr?.trim() 
       ? initialData.overviewAr 
       : (initialData?.longDescriptionAr || initialData?.shortDescriptionAr || ""),
+    overviewEn: initialData?.overviewEn?.trim() 
+      ? initialData.overviewEn 
+      : (initialData?.longDescriptionEn || initialData?.shortDescriptionEn || ""),
     showOverview: initialData?.showOverview ?? true,
     isGuaranteed: initialData?.isGuaranteed ?? true,
     isBestSeller: initialData?.isBestSeller ?? true,
@@ -128,8 +133,9 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               "Guide accompagnateur professionnel certifié",
               "Assurance assistance voyage incluse",
             ])),
-    includedServicesFr: initialData?.includedServicesFr || [],
-    includedServicesAr: initialData?.includedServicesAr || [],
+    includedServicesFr: initialData?.includedServicesFr || initialData?.includedFr || [],
+    includedServicesAr: initialData?.includedServicesAr || initialData?.includedAr || [],
+    includedServicesEn: initialData?.includedServicesEn || initialData?.includedEn || [],
     excludedServices: initialData?.excludedServices && initialData.excludedServices.length > 0
       ? initialData.excludedServices
       : (initialData?.excludedServicesFr && initialData.excludedServicesFr.length > 0
@@ -140,8 +146,9 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               "Pourboires pour l'équipe locale et chauffeur",
               "Activités et excursions optionnelles",
             ])),
-    excludedServicesFr: initialData?.excludedServicesFr || [],
-    excludedServicesAr: initialData?.excludedServicesAr || [],
+    excludedServicesFr: initialData?.excludedServicesFr || initialData?.excludedFr || [],
+    excludedServicesAr: initialData?.excludedServicesAr || initialData?.excludedAr || [],
+    excludedServicesEn: initialData?.excludedServicesEn || initialData?.excludedEn || [],
     whatToBring: initialData?.whatToBring && initialData.whatToBring.length > 0
       ? initialData.whatToBring
       : (initialData?.checklistItemsFr && initialData.checklistItemsFr.length > 0
@@ -153,8 +160,18 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               "Crème solaire, lunettes de soleil et casquette",
               "Petite pharmacie personnelle et serviette microfibre",
             ])),
-    checklistItemsFr: initialData?.checklistItemsFr || [],
-    checklistItemsAr: initialData?.checklistItemsAr || [],
+    checklistItemsFr: initialData?.checklistItemsFr || initialData?.equipmentFr || [],
+    checklistItemsAr: initialData?.checklistItemsAr || initialData?.equipmentAr || [],
+    checklistItemsEn: initialData?.checklistItemsEn || initialData?.equipmentEn || [],
+    includedFr: initialData?.includedFr || initialData?.includedServicesFr || [],
+    includedAr: initialData?.includedAr || initialData?.includedServicesAr || [],
+    includedEn: initialData?.includedEn || initialData?.includedServicesEn || [],
+    excludedFr: initialData?.excludedFr || initialData?.excludedServicesFr || [],
+    excludedAr: initialData?.excludedAr || initialData?.excludedServicesAr || [],
+    excludedEn: initialData?.excludedEn || initialData?.excludedServicesEn || [],
+    equipmentFr: initialData?.equipmentFr || initialData?.checklistItemsFr || [],
+    equipmentAr: initialData?.equipmentAr || initialData?.checklistItemsAr || [],
+    equipmentEn: initialData?.equipmentEn || initialData?.checklistItemsEn || [],
   });
 
   // Slug generator helper
@@ -176,6 +193,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
       dayNumber: nextDayNum,
       titleFr: `Étape du Jour ${nextDayNum}`,
       titleAr: `برنامج اليوم ${nextDayNum}`,
+      titleEn: `Day ${nextDayNum} Schedule`,
       timeSlot: "08h30 - 18h00",
       locationName: formData.destinationRegion || "Destination Étape",
       location: formData.destinationRegion || "Destination Étape",
@@ -183,6 +201,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
       meals: ["BREAKFAST", "DINNER"],
       descriptionFr: "Description des visites et activités programmées pour cette journée.",
       descriptionAr: "وصف الأنشطة والزيارات المبرمجة لهذا اليوم.",
+      descriptionEn: "Detailed daily itinerary, activities and guided visits.",
       activityTags: ["Visite guidée", "Photos"],
       addons: [],
     };
@@ -281,188 +300,401 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
     });
   };
 
-  // Local inputs for Services & Équipements
+  // Tab 4 Multilingual Services & Equipment State (FR, AR, EN)
+  const [servicesLang, setServicesLang] = useState<"FR" | "AR" | "EN">(
+    isAr ? "AR" : locale === "en" ? "EN" : "FR"
+  );
   const [newIncludedInput, setNewIncludedInput] = useState("");
   const [newExcludedInput, setNewExcludedInput] = useState("");
   const [newWhatToBringInput, setNewWhatToBringInput] = useState("");
 
-  const suggestedIncludedTags = [
-    "Transport touristique climatisé grand confort (TIST)",
-    "Hébergement sélectionné (Hôtel 4★ ou Bivouac de luxe)",
-    "Demi-pension (Dîner traditionnel & Petit-déjeuner)",
-    "Pension complète selon le programme",
-    "Session Kayak et gilets de sauvetage homologués",
-    "Balade à dos de dromadaire au coucher de soleil",
-    "Soirée musicale feu de camp sous les étoiles",
-    "Guide accompagnateur officiel certifié",
-    "Assurance assistance voyage incluse",
-  ];
+  const suggestedIncludedTags = {
+    FR: [
+      "Transport touristique climatisé grand confort (TIST)",
+      "Hébergement sélectionné (Hôtel 4★ ou Bivouac de luxe)",
+      "Demi-pension (Dîner traditionnel & Petit-déjeuner)",
+      "Pension complète selon le programme",
+      "Session Kayak et gilets de sauvetage homologués",
+      "Balade à dos de dromadaire au coucher de soleil",
+      "Soirée musicale feu de camp sous les étoiles",
+      "Guide accompagnateur officiel certifié",
+      "Assurance assistance voyage incluse",
+    ],
+    AR: [
+      "نقل سياحي مريح ومكيف عالي الجودة (TIST)",
+      "إقامة مختارة (فندق 4 نجوم أو مخيم صحراوي فخم)",
+      "نصف إقامة (عشاء مغربي تقليدي + وجبة الفطور)",
+      "إقامة كاملة مع وجبات الغداء حسب البرنامج",
+      "جولة تجذيف بقوارب الكاياك مع سترات النجاة المعتمدة",
+      "جولة ركوب الجمال عند غروب الشمس في الكثبان",
+      "سهرة ليلية حول النار مع موسيقى كناوة التراثية",
+      "مرشد ومرافق سياحي رسمي معتمد طيلة الرحلة",
+      "تأمين المساعدة الشامل أثناء السفر مشمول",
+    ],
+    EN: [
+      "Comfortable air-conditioned tourist transport (TIST)",
+      "Selected accommodation (4★ Hotel or Luxury Desert Camp)",
+      "Half-board (Traditional Moroccan Dinner & Breakfast)",
+      "Full-board with lunches according to the program",
+      "Guided Kayaking session with certified life vests",
+      "Sunset camel trek across the golden sand dunes",
+      "Campfire musical evening under starry skies",
+      "Official certified professional tour guide",
+      "Comprehensive travel assistance insurance included",
+    ],
+  };
 
-  const suggestedExcludedTags = [
-    "Déjeuners libres lors des escales routières",
-    "Boissons et dépenses personnelles",
-    "Pourboires pour chauffeur et équipe locale",
-    "Session Quad 1h ou Buggy dans les dunes",
-    "Excursion 4x4 Tour des Dunes & Oasis",
-    "Supplément chambre individuelle (single)",
-  ];
+  const suggestedExcludedTags = {
+    FR: [
+      "Déjeuners libres lors des escales routières",
+      "Boissons et dépenses personnelles",
+      "Pourboires pour chauffeur et équipe locale",
+      "Session Quad 1h ou Buggy dans les dunes",
+      "Excursion 4x4 Tour des Dunes & Oasis",
+      "Supplément chambre individuelle (single)",
+    ],
+    AR: [
+      "وجبات الغداء الحرة أثناء التوقفات على الطريق",
+      "المشروبات والمقتنيات والمصاريف الشخصية",
+      "إكراميات السائق وفريق العمل المحلي",
+      "جولة كواد (Quad) لمدة ساعة أو باجي في الكثبان",
+      "جولة سيارات الدفع الرباعي 4x4 في الواحات والكثبان",
+      "واجب الغرفة الفردية الخاصة (Single)",
+    ],
+    EN: [
+      "Lunches during transit highway stops",
+      "Beverages and personal expenses",
+      "Tips for driver and local crew",
+      "1-hour Quad or Buggy ride in the sand dunes",
+      "4x4 Desert & Oasis safari excursion",
+      "Single room private supplement",
+    ],
+  };
 
-  const suggestedWhatToBringTags = [
-    "Carte d'Identité Nationale (CIN) ou Passeport original obligatoire",
-    "Chaussures aquatiques fermées pour l'eau et rochers",
-    "Chaussures confortables pour la marche et randonnée",
-    "Maillot de bain, serviette microfibre et casquette",
-    "Crème solaire indice 50 et lunettes de soleil",
-    "Vêtement chaud (veste / polaire) pour les soirées fraîches",
-    "Batterie externe portable (Powerbank) & lampe torche",
-    "Petite trousse de premiers soins et pharmacie personnelle",
-  ];
+  const suggestedWhatToBringTags = {
+    FR: [
+      "Carte d'Identité Nationale (CIN) ou Passeport original obligatoire",
+      "Chaussures aquatiques fermées pour l'eau et rochers",
+      "Chaussures confortables pour la marche et randonnée",
+      "Maillot de bain, serviette microfibre et casquette",
+      "Crème solaire indice 50 et lunettes de soleil",
+      "Vêtement chaud (veste / polaire) pour les soirées fraîches",
+      "Batterie externe portable (Powerbank) & lampe torche",
+      "Petite trousse de premiers soins et pharmacie personnelle",
+    ],
+    AR: [
+      "البطاقة الوطنية للتعريف (CIN) أو جواز السفر الأصلي إجباري",
+      "حذاء مائي مغلق للمشي في الوديان والشلالات والصخور",
+      "حذاء مريح للمشي والمسارات الجبلية والرمال",
+      "لباس السباحة، منشفة ميكروفايبر وقبعة للشمس",
+      "واقي شمسي بدرجة حماية 50 ونظارات شمسية",
+      "سترة أو ملابس دافئة لليل وملابس خفيفة للنهار",
+      "شاحن متنقل (Powerbank) ومصباح يدوي صغير",
+      "صيدلية أدوية شخصية ومستلزمات النظافة",
+    ],
+    EN: [
+      "Original National ID card (CIN) or Passport mandatory",
+      "Closed water shoes for rivers, waterfalls and rocks",
+      "Comfortable hiking shoes or walking sneakers",
+      "Swimwear, microfiber quick-dry towel and sun cap",
+      "Sunscreen SPF 50 and UV-protective sunglasses",
+      "Warm jacket or fleece for cool desert evenings",
+      "Portable power bank & compact flashlight",
+      "Personal first-aid kit and daily medications",
+    ],
+  };
 
-  // Included Services Handlers
+  // Active arrays for current servicesLang
+  const activeIncludedList: string[] =
+    servicesLang === "AR"
+      ? (formData.includedServicesAr || [])
+      : servicesLang === "EN"
+      ? (formData.includedServicesEn || [])
+      : (formData.includedServicesFr?.length ? formData.includedServicesFr : (formData.includedServices || []));
+
+  const activeExcludedList: string[] =
+    servicesLang === "AR"
+      ? (formData.excludedServicesAr || [])
+      : servicesLang === "EN"
+      ? (formData.excludedServicesEn || [])
+      : (formData.excludedServicesFr?.length ? formData.excludedServicesFr : (formData.excludedServices || []));
+
+  const activeWhatToBringList: string[] =
+    servicesLang === "AR"
+      ? (formData.checklistItemsAr || [])
+      : servicesLang === "EN"
+      ? (formData.checklistItemsEn || [])
+      : (formData.checklistItemsFr?.length ? formData.checklistItemsFr : (formData.whatToBring || []));
+
+  // Included Handlers
   const handleAddIncluded = (itemText?: string) => {
     const text = (itemText || newIncludedInput).trim();
     if (!text) return;
-    const current = formData.includedServices || [];
-    if (current.includes(text)) return;
-    const updated = [...current, text];
-    setFormData({
-      ...formData,
-      includedServices: updated,
-      includedServicesFr: updated,
-    });
+
+    if (servicesLang === "AR") {
+      const current = formData.includedServicesAr || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        includedServicesAr: updated,
+        includedAr: updated,
+      });
+    } else if (servicesLang === "EN") {
+      const current = formData.includedServicesEn || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        includedServicesEn: updated,
+        includedEn: updated,
+      });
+    } else {
+      const current = formData.includedServicesFr?.length ? formData.includedServicesFr : (formData.includedServices || []);
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        includedServicesFr: updated,
+        includedFr: updated,
+        includedServices: updated,
+      });
+    }
     if (!itemText) setNewIncludedInput("");
   };
 
   const handleRemoveIncluded = (index: number) => {
-    const current = formData.includedServices || [];
-    const updated = current.filter((_, i) => i !== index);
-    setFormData({
-      ...formData,
-      includedServices: updated,
-      includedServicesFr: updated,
-    });
+    if (servicesLang === "AR") {
+      const updated = (formData.includedServicesAr || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, includedServicesAr: updated, includedAr: updated });
+    } else if (servicesLang === "EN") {
+      const updated = (formData.includedServicesEn || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, includedServicesEn: updated, includedEn: updated });
+    } else {
+      const current = formData.includedServicesFr?.length ? formData.includedServicesFr : (formData.includedServices || []);
+      const updated = current.filter((_, i) => i !== index);
+      setFormData({ ...formData, includedServicesFr: updated, includedFr: updated, includedServices: updated });
+    }
   };
 
   const handleMoveIncluded = (index: number, direction: "UP" | "DOWN") => {
-    const current = [...(formData.includedServices || [])];
+    const targetArray = [...activeIncludedList];
     const newIndex = direction === "UP" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= current.length) return;
-    const temp = current[index];
-    current[index] = current[newIndex];
-    current[newIndex] = temp;
-    setFormData({
-      ...formData,
-      includedServices: current,
-      includedServicesFr: current,
-    });
+    if (newIndex < 0 || newIndex >= targetArray.length) return;
+    const temp = targetArray[index];
+    targetArray[index] = targetArray[newIndex];
+    targetArray[newIndex] = temp;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, includedServicesAr: targetArray, includedAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, includedServicesEn: targetArray, includedEn: targetArray });
+    } else {
+      setFormData({ ...formData, includedServicesFr: targetArray, includedFr: targetArray, includedServices: targetArray });
+    }
   };
 
   const handleUpdateIncluded = (index: number, val: string) => {
-    const current = [...(formData.includedServices || [])];
-    current[index] = val;
-    setFormData({
-      ...formData,
-      includedServices: current,
-      includedServicesFr: current,
-    });
+    const targetArray = [...activeIncludedList];
+    targetArray[index] = val;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, includedServicesAr: targetArray, includedAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, includedServicesEn: targetArray, includedEn: targetArray });
+    } else {
+      setFormData({ ...formData, includedServicesFr: targetArray, includedFr: targetArray, includedServices: targetArray });
+    }
   };
 
-  // Excluded Services Handlers
+  // Excluded Handlers
   const handleAddExcluded = (itemText?: string) => {
     const text = (itemText || newExcludedInput).trim();
     if (!text) return;
-    const current = formData.excludedServices || [];
-    if (current.includes(text)) return;
-    const updated = [...current, text];
-    setFormData({
-      ...formData,
-      excludedServices: updated,
-      excludedServicesFr: updated,
-    });
+
+    if (servicesLang === "AR") {
+      const current = formData.excludedServicesAr || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        excludedServicesAr: updated,
+        excludedAr: updated,
+      });
+    } else if (servicesLang === "EN") {
+      const current = formData.excludedServicesEn || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        excludedServicesEn: updated,
+        excludedEn: updated,
+      });
+    } else {
+      const current = formData.excludedServicesFr?.length ? formData.excludedServicesFr : (formData.excludedServices || []);
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        excludedServicesFr: updated,
+        excludedFr: updated,
+        excludedServices: updated,
+      });
+    }
     if (!itemText) setNewExcludedInput("");
   };
 
   const handleRemoveExcluded = (index: number) => {
-    const current = formData.excludedServices || [];
-    const updated = current.filter((_, i) => i !== index);
-    setFormData({
-      ...formData,
-      excludedServices: updated,
-      excludedServicesFr: updated,
-    });
+    if (servicesLang === "AR") {
+      const updated = (formData.excludedServicesAr || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, excludedServicesAr: updated, excludedAr: updated });
+    } else if (servicesLang === "EN") {
+      const updated = (formData.excludedServicesEn || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, excludedServicesEn: updated, excludedEn: updated });
+    } else {
+      const current = formData.excludedServicesFr?.length ? formData.excludedServicesFr : (formData.excludedServices || []);
+      const updated = current.filter((_, i) => i !== index);
+      setFormData({ ...formData, excludedServicesFr: updated, excludedFr: updated, excludedServices: updated });
+    }
   };
 
   const handleMoveExcluded = (index: number, direction: "UP" | "DOWN") => {
-    const current = [...(formData.excludedServices || [])];
+    const targetArray = [...activeExcludedList];
     const newIndex = direction === "UP" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= current.length) return;
-    const temp = current[index];
-    current[index] = current[newIndex];
-    current[newIndex] = temp;
-    setFormData({
-      ...formData,
-      excludedServices: current,
-      excludedServicesFr: current,
-    });
+    if (newIndex < 0 || newIndex >= targetArray.length) return;
+    const temp = targetArray[index];
+    targetArray[index] = targetArray[newIndex];
+    targetArray[newIndex] = temp;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, excludedServicesAr: targetArray, excludedAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, excludedServicesEn: targetArray, excludedEn: targetArray });
+    } else {
+      setFormData({ ...formData, excludedServicesFr: targetArray, excludedFr: targetArray, excludedServices: targetArray });
+    }
   };
 
   const handleUpdateExcluded = (index: number, val: string) => {
-    const current = [...(formData.excludedServices || [])];
-    current[index] = val;
-    setFormData({
-      ...formData,
-      excludedServices: current,
-      excludedServicesFr: current,
-    });
+    const targetArray = [...activeExcludedList];
+    targetArray[index] = val;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, excludedServicesAr: targetArray, excludedAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, excludedServicesEn: targetArray, excludedEn: targetArray });
+    } else {
+      setFormData({ ...formData, excludedServicesFr: targetArray, excludedFr: targetArray, excludedServices: targetArray });
+    }
   };
 
   // What To Bring Handlers
   const handleAddWhatToBring = (itemText?: string) => {
     const text = (itemText || newWhatToBringInput).trim();
     if (!text) return;
-    const current = formData.whatToBring || [];
-    if (current.includes(text)) return;
-    const updated = [...current, text];
-    setFormData({
-      ...formData,
-      whatToBring: updated,
-      checklistItemsFr: updated,
-    });
+
+    if (servicesLang === "AR") {
+      const current = formData.checklistItemsAr || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        checklistItemsAr: updated,
+        equipmentAr: updated,
+      });
+    } else if (servicesLang === "EN") {
+      const current = formData.checklistItemsEn || [];
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        checklistItemsEn: updated,
+        equipmentEn: updated,
+      });
+    } else {
+      const current = formData.checklistItemsFr?.length ? formData.checklistItemsFr : (formData.whatToBring || []);
+      if (current.includes(text)) return;
+      const updated = [...current, text];
+      setFormData({
+        ...formData,
+        checklistItemsFr: updated,
+        equipmentFr: updated,
+        whatToBring: updated,
+      });
+    }
     if (!itemText) setNewWhatToBringInput("");
   };
 
   const handleRemoveWhatToBring = (index: number) => {
-    const current = formData.whatToBring || [];
-    const updated = current.filter((_, i) => i !== index);
-    setFormData({
-      ...formData,
-      whatToBring: updated,
-      checklistItemsFr: updated,
-    });
+    if (servicesLang === "AR") {
+      const updated = (formData.checklistItemsAr || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, checklistItemsAr: updated, equipmentAr: updated });
+    } else if (servicesLang === "EN") {
+      const updated = (formData.checklistItemsEn || []).filter((_, i) => i !== index);
+      setFormData({ ...formData, checklistItemsEn: updated, equipmentEn: updated });
+    } else {
+      const current = formData.checklistItemsFr?.length ? formData.checklistItemsFr : (formData.whatToBring || []);
+      const updated = current.filter((_, i) => i !== index);
+      setFormData({ ...formData, checklistItemsFr: updated, equipmentFr: updated, whatToBring: updated });
+    }
   };
 
   const handleMoveWhatToBring = (index: number, direction: "UP" | "DOWN") => {
-    const current = [...(formData.whatToBring || [])];
+    const targetArray = [...activeWhatToBringList];
     const newIndex = direction === "UP" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= current.length) return;
-    const temp = current[index];
-    current[index] = current[newIndex];
-    current[newIndex] = temp;
-    setFormData({
-      ...formData,
-      whatToBring: current,
-      checklistItemsFr: current,
-    });
+    if (newIndex < 0 || newIndex >= targetArray.length) return;
+    const temp = targetArray[index];
+    targetArray[index] = targetArray[newIndex];
+    targetArray[newIndex] = temp;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, checklistItemsAr: targetArray, equipmentAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, checklistItemsEn: targetArray, equipmentEn: targetArray });
+    } else {
+      setFormData({ ...formData, checklistItemsFr: targetArray, equipmentFr: targetArray, whatToBring: targetArray });
+    }
   };
 
   const handleUpdateWhatToBring = (index: number, val: string) => {
-    const current = [...(formData.whatToBring || [])];
-    current[index] = val;
-    setFormData({
-      ...formData,
-      whatToBring: current,
-      checklistItemsFr: current,
-    });
+    const targetArray = [...activeWhatToBringList];
+    targetArray[index] = val;
+
+    if (servicesLang === "AR") {
+      setFormData({ ...formData, checklistItemsAr: targetArray, equipmentAr: targetArray });
+    } else if (servicesLang === "EN") {
+      setFormData({ ...formData, checklistItemsEn: targetArray, equipmentEn: targetArray });
+    } else {
+      setFormData({ ...formData, checklistItemsFr: targetArray, equipmentFr: targetArray, whatToBring: targetArray });
+    }
+  };
+
+  const handleCopyFromFrench = (targetLang: "AR" | "EN") => {
+    const baseIncluded = formData.includedServicesFr?.length ? formData.includedServicesFr : (formData.includedServices || []);
+    const baseExcluded = formData.excludedServicesFr?.length ? formData.excludedServicesFr : (formData.excludedServices || []);
+    const baseBring = formData.checklistItemsFr?.length ? formData.checklistItemsFr : (formData.whatToBring || []);
+
+    if (targetLang === "AR") {
+      setFormData((prev: any) => ({
+        ...prev,
+        includedServicesAr: [...baseIncluded],
+        includedAr: [...baseIncluded],
+        excludedServicesAr: [...baseExcluded],
+        excludedAr: [...baseExcluded],
+        checklistItemsAr: [...baseBring],
+        equipmentAr: [...baseBring],
+      }));
+    } else if (targetLang === "EN") {
+      setFormData((prev: any) => ({
+        ...prev,
+        includedServicesEn: [...baseIncluded],
+        includedEn: [...baseIncluded],
+        excludedServicesEn: [...baseExcluded],
+        excludedEn: [...baseExcluded],
+        checklistItemsEn: [...baseBring],
+        equipmentEn: [...baseBring],
+      }));
+    }
   };
 
   // Submit Handler
@@ -473,9 +705,31 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
 
     startTransition(async () => {
       try {
-        const res = isEditing && formData.id
-          ? await updateTripAction(formData.id, formData)
-          : await createTripAction(formData);
+        const payload: TripFormData = {
+          ...formData,
+          shortDescriptionFr: formData.shortDescriptionFr || (formData.overviewFr ? formData.overviewFr.slice(0, 180) : "Voyage organisé avec Rahalat Bladna"),
+          shortDescriptionAr: formData.shortDescriptionAr || (formData.overviewAr ? formData.overviewAr.slice(0, 180) : "برنامج سياحي مميز مع رحلات بلادنا"),
+          shortDescriptionEn: formData.shortDescriptionEn || (formData.overviewEn ? formData.overviewEn.slice(0, 180) : "Exclusive guided travel experience"),
+          longDescriptionFr: formData.longDescriptionFr || formData.overviewFr || "",
+          longDescriptionAr: formData.longDescriptionAr || formData.overviewAr || "",
+          longDescriptionEn: formData.longDescriptionEn || formData.overviewEn || "",
+          includedFr: formData.includedFr?.length ? formData.includedFr : (formData.includedServicesFr || []),
+          includedAr: formData.includedAr?.length ? formData.includedAr : (formData.includedServicesAr || []),
+          includedEn: formData.includedEn?.length ? formData.includedEn : (formData.includedServicesEn || []),
+          excludedFr: formData.excludedFr?.length ? formData.excludedFr : (formData.excludedServicesFr || []),
+          excludedAr: formData.excludedAr?.length ? formData.excludedAr : (formData.excludedServicesAr || []),
+          excludedEn: formData.excludedEn?.length ? formData.excludedEn : (formData.excludedServicesEn || []),
+          equipmentFr: formData.equipmentFr?.length ? formData.equipmentFr : (formData.checklistItemsFr || []),
+          equipmentAr: formData.equipmentAr?.length ? formData.equipmentAr : (formData.checklistItemsAr || []),
+          equipmentEn: formData.equipmentEn?.length ? formData.equipmentEn : (formData.checklistItemsEn || []),
+          includedServices: formData.includedServices?.length ? formData.includedServices : (formData.includedServicesFr || []),
+          excludedServices: formData.excludedServices?.length ? formData.excludedServices : (formData.excludedServicesFr || []),
+          whatToBring: formData.whatToBring?.length ? formData.whatToBring : (formData.checklistItemsFr || []),
+        };
+
+        const res = isEditing && payload.id
+          ? await updateTripAction(payload.id, payload)
+          : await createTripAction(payload);
 
         if (res.success) {
           setSuccessMsg("Circuit enregistré avec succès !");
@@ -653,10 +907,10 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6 space-y-5">
             <h2 className="text-cyan-600 dark:text-cyan-400 font-bold text-xs uppercase tracking-wider flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              <span>Informations Générales & Titres Bilingues</span>
+              <span>Informations Générales & Titres Trilingues</span>
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
                   Titre du Circuit (Français) *
@@ -682,6 +936,19 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                   placeholder="مثال: سحر الصحراء : رمال مرزوكة ومضايق تودغى"
                   value={formData.titleAr}
                   onChange={(e) => setFormData({ ...formData, titleAr: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
+                  Titre du Circuit (Anglais)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Desert Magic: Merzouga Dunes (3D/2N)"
+                  value={formData.titleEn || ""}
+                  onChange={(e) => setFormData({ ...formData, titleEn: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
                 />
               </div>
@@ -829,8 +1096,8 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               </div>
             )}
 
-            {/* Bilingue Textareas */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Trilingual Textareas */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* French Overview */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -850,6 +1117,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                       ...formData,
                       overviewFr: val,
                       longDescriptionFr: val,
+                      shortDescriptionFr: val.slice(0, 180),
                     });
                   }}
                   placeholder="Ex: Partez pour une immersion dépaysante entre sommets majestueux, eaux turquoise et bivouac de charme. Ce séjour combine le dépassement de soi et la détente absolue au cœur de paysages à couper le souffle..."
@@ -880,6 +1148,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                       ...formData,
                       overviewAr: val,
                       longDescriptionAr: val,
+                      shortDescriptionAr: val.slice(0, 180),
                     });
                   }}
                   placeholder="مثال: انطلقوا في رحلة استثنائية تجمع بين روعة القمم الشاهقة والمياه الفيروزية للساحل المتوسطي، لتجديد الطاقة واكتشاف سحر المغرب الأصيل..."
@@ -887,6 +1156,36 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                 />
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 text-right">
                   نصيحة: افصل الفقرات بسطر فارغ لتنسيق النص بشكل جميل وجذاب للقارئ.
+                </p>
+              </div>
+
+              {/* English Overview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold">
+                    Overview & Philosophy (English)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {(formData.overviewEn || "").length} chars
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  value={formData.overviewEn || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({
+                      ...formData,
+                      overviewEn: val,
+                      longDescriptionEn: val,
+                      shortDescriptionEn: val.slice(0, 180),
+                    });
+                  }}
+                  placeholder="Ex: Embark on an unforgettable journey between majestic peaks, turquoise waters, and luxury desert bivouac. This tour combines thrilling adventure with authentic Moroccan hospitality..."
+                  className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm leading-relaxed transition-all resize-y"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Tip: Separate paragraphs with an empty line for elegant layout on the public trip showcase.
                 </p>
               </div>
             </div>
@@ -1133,7 +1432,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                   </div>
 
                   {/* Day Fields */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
                         Titre de l&apos;étape (FR) *
@@ -1163,6 +1462,23 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                         onChange={(e) => {
                           const days = [...formData.itineraryDays];
                           days[index].titleAr = e.target.value;
+                          setFormData({ ...formData, itineraryDays: days });
+                        }}
+                        className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
+                        Titre de l&apos;étape (EN)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Todra Gorges & Sunset Camp"
+                        value={day.titleEn || ""}
+                        onChange={(e) => {
+                          const days = [...formData.itineraryDays];
+                          days[index].titleEn = e.target.value;
                           setFormData({ ...formData, itineraryDays: days });
                         }}
                         className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
@@ -1224,7 +1540,7 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
                         Programme détaillé de la journée (FR) *
@@ -1254,6 +1570,23 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                         onChange={(e) => {
                           const days = [...formData.itineraryDays];
                           days[index].descriptionAr = e.target.value;
+                          setFormData({ ...formData, itineraryDays: days });
+                        }}
+                        className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1.5">
+                        Programme détaillé de la journée (EN)
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="Ex: Morning scenic drive, hiking across gorges and evening traditional dinner."
+                        value={day.descriptionEn || ""}
+                        onChange={(e) => {
+                          const days = [...formData.itineraryDays];
+                          days[index].descriptionEn = e.target.value;
                           setFormData({ ...formData, itineraryDays: days });
                         }}
                         className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
@@ -1486,30 +1819,99 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
       {/* ======================================================== */}
       {activeTab === 4 && (
         <div className="space-y-6">
-          {/* Header Banner */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-                <span>{isAr ? "الخدمات المشمولة، غير المشمولة ولائحة الأمتعة" : "Services Inclus, Non Inclus & Équipements"}</span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isAr 
-                  ? "تتم مزامنة هذه المعطيات مباشرة وتلقائياً مع صفحة البرنامج السياحي المعروضة للزبائن." 
-                  : "Ces listes sont immédiatement synchronisées avec la fiche publique du circuit (/trips/[slug]). Cliquez sur les suggestions pour ajouter rapidement."}
-              </p>
+
+          {/* Header Banner with Lang Switcher */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                  <span>{isAr ? "الخدمات المشمولة، غير المشمولة ولائحة الأمتعة" : "Services Inclus, Non Inclus & Équipements"}</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isAr
+                    ? "أدخل المحتوى بكل لغة على حدة باستخدام مبدّل اللغة أدناه. كل نسخة لغوية مستقلة."
+                    : "Saisissez le contenu dans chaque langue séparément via le sélecteur ci-dessous. Chaque version est indépendante."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
+                  {activeIncludedList.length} Inclus
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">
+                  {activeExcludedList.length} Non Inclus
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30">
+                  {activeWhatToBringList.length} Équipements
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
-                {formData.includedServices?.length || 0} Inclus
-              </span>
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">
-                {formData.excludedServices?.length || 0} Non Inclus
-              </span>
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30">
-                {formData.whatToBring?.length || 0} Équipements
-              </span>
+            {/* Language Switcher */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+                {(["FR", "AR", "EN"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => { setServicesLang(lang); setNewIncludedInput(""); setNewExcludedInput(""); setNewWhatToBringInput(""); }}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                      servicesLang === lang
+                        ? "bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-sm border border-slate-200 dark:border-slate-700"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Globe className="w-3 h-3" />
+                    {lang === "FR" ? "🇫🇷 Français" : lang === "AR" ? "🇲🇦 عربية" : "🇬🇧 English"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Copy from French shortcut */}
+              {servicesLang !== "FR" && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyFromFrench(servicesLang)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition active:scale-95"
+                  title={`Copier les listes FR vers ${servicesLang}`}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>
+                    {servicesLang === "AR"
+                      ? "نسخ من الفرنسية كنقطة انطلاق"
+                      : "Copy from French as starting point"}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Progress pills per language */}
+            <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+              {(["FR", "AR", "EN"] as const).map((lang) => {
+                const inc = lang === "FR"
+                  ? (formData.includedServicesFr?.length ?? formData.includedServices?.length ?? 0)
+                  : lang === "AR" ? (formData.includedServicesAr?.length ?? 0) : (formData.includedServicesEn?.length ?? 0);
+                const exc = lang === "FR"
+                  ? (formData.excludedServicesFr?.length ?? formData.excludedServices?.length ?? 0)
+                  : lang === "AR" ? (formData.excludedServicesAr?.length ?? 0) : (formData.excludedServicesEn?.length ?? 0);
+                const eq = lang === "FR"
+                  ? (formData.checklistItemsFr?.length ?? formData.whatToBring?.length ?? 0)
+                  : lang === "AR" ? (formData.checklistItemsAr?.length ?? 0) : (formData.checklistItemsEn?.length ?? 0);
+                const total = inc + exc + eq;
+                return (
+                  <span
+                    key={lang}
+                    className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${
+                      servicesLang === lang
+                        ? "bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30"
+                        : "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    {lang} — {total} élément{total !== 1 ? "s" : ""}
+                    {total === 0 && " ⚠️"}
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -1519,27 +1921,35 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <span>{isAr ? "الخدمات المشمولة في السعر (Services Inclus)" : "Prestations Incluses (Services Inclus)"}</span>
+                  <span>
+                    {servicesLang === "AR"
+                      ? "الخدمات المشمولة في السعر"
+                      : servicesLang === "EN"
+                      ? "Included Services"
+                      : "Prestations Incluses (Services Inclus)"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {isAr 
-                    ? "كل ما هو مدفوع ومضمون للمسافر ضمن سعر التذكرة (نقل سياحي، مبيت، وجبات، تأطير...)." 
+                  {servicesLang === "AR"
+                    ? "كل ما هو مدفوع ومضمون للمسافر ضمن سعر التذكرة (نقل سياحي، مبيت، وجبات، تأطير...)."
+                    : servicesLang === "EN"
+                    ? "All services covered by the agency (Transport, Accommodation, Meals, Official Guide, Activities...)."
                     : "Prestations prises en charge par l'agence (Transport, Hébergement, Repas, Guide officiel, Activités...)."}
                 </p>
               </div>
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-500/20 self-start sm:self-center">
-                {formData.includedServices?.length || 0} élément(s)
+                {activeIncludedList.length} élément(s)
               </span>
             </div>
 
             {/* Suggestions Chips */}
             <div className="space-y-1.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isAr ? "اقتراحات سريعة للإضافة بنقرة واحدة :" : "Suggestions rapides (cliquez pour ajouter) :"}
+                {servicesLang === "AR" ? "اقتراحات سريعة للإضافة بنقرة واحدة :" : "Suggestions rapides (cliquez pour ajouter) :"}
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {suggestedIncludedTags.map((tag, idx) => {
-                  const isAdded = (formData.includedServices || []).includes(tag);
+                {suggestedIncludedTags[servicesLang].map((tag, idx) => {
+                  const isAdded = activeIncludedList.includes(tag);
                   return (
                     <button
                       key={idx}
@@ -1560,19 +1970,21 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               </div>
             </div>
 
-            {/* Input Add Form */}
+            {/* Input */}
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder={isAr ? "أضف خدمة مشمولة جديدة (مثال: نزهة بالقوارب، وجبة غداء شواء...)" : "Saisir une prestation incluse personnalisée..."}
+                dir={servicesLang === "AR" ? "rtl" : "ltr"}
+                placeholder={
+                  servicesLang === "AR"
+                    ? "أضف خدمة مشمولة جديدة..."
+                    : servicesLang === "EN"
+                    ? "Add a new included service..."
+                    : "Saisir une prestation incluse personnalisée..."
+                }
                 value={newIncludedInput}
                 onChange={(e) => setNewIncludedInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddIncluded();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddIncluded(); } }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-sm transition"
               />
               <button
@@ -1581,18 +1993,22 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                 className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>{isAr ? "إضافة" : "Ajouter"}</span>
+                <span>{servicesLang === "AR" ? "إضافة" : "Ajouter"}</span>
               </button>
             </div>
 
-            {/* List of Included Items */}
+            {/* List */}
             <div className="space-y-2">
-              {(!formData.includedServices || formData.includedServices.length === 0) ? (
+              {activeIncludedList.length === 0 ? (
                 <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500">
-                  {isAr ? "لا توجد خدمات مشمولة محددة حتى الآن. انقر على الاقتراحات أعلاه للبدء." : "Aucune prestation incluse configurée. Cliquez sur les suggestions ci-dessus pour en ajouter."}
+                  {servicesLang === "AR"
+                    ? "لا توجد خدمات مشمولة. انقر على الاقتراحات أعلاه للبدء."
+                    : servicesLang === "EN"
+                    ? "No included services yet. Click suggestions above to get started."
+                    : "Aucune prestation incluse configurée. Cliquez sur les suggestions ci-dessus."}
                 </div>
               ) : (
-                formData.includedServices.map((item, index) => (
+                activeIncludedList.map((item, index) => (
                   <div
                     key={index}
                     className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 transition group"
@@ -1600,41 +2016,17 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                     <span className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
                       {index + 1}
                     </span>
-
                     <input
                       type="text"
+                      dir={servicesLang === "AR" ? "rtl" : "ltr"}
                       value={item}
                       onChange={(e) => handleUpdateIncluded(index, e.target.value)}
                       className="flex-1 bg-transparent border-none text-xs sm:text-sm text-slate-900 dark:text-white outline-none font-medium focus:bg-white dark:focus:bg-slate-900 px-2 py-1 rounded"
                     />
-
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => handleMoveIncluded(index, "UP")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Monter"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === formData.includedServices.length - 1}
-                        onClick={() => handleMoveIncluded(index, "DOWN")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Descendre"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIncluded(index)}
-                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button type="button" disabled={index === 0} onClick={() => handleMoveIncluded(index, "UP")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowUp className="w-3.5 h-3.5" /></button>
+                      <button type="button" disabled={index === activeIncludedList.length - 1} onClick={() => handleMoveIncluded(index, "DOWN")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowDown className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => handleRemoveIncluded(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))
@@ -1648,27 +2040,35 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <X className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                  <span>{isAr ? "الخدمات غير المشمولة (Services Non Inclus)" : "Prestations Non Incluses (Services Non Inclus)"}</span>
+                  <span>
+                    {servicesLang === "AR"
+                      ? "الخدمات غير المشمولة"
+                      : servicesLang === "EN"
+                      ? "Excluded Services"
+                      : "Prestations Non Incluses"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {isAr 
-                    ? "مصاريف إضافية أو أنشطة اختيارية يتحملها الزبون على نفقته الخاصة (وجبات حرة، إكراميات، كواد...)." 
-                    : "Frais restant à la charge du voyageur ou suppléments optionnels (Déjeuners libres, Pourboires, Boissons...)."}
+                  {servicesLang === "AR"
+                    ? "مصاريف إضافية أو أنشطة اختيارية يتحملها الزبون على نفقته الخاصة."
+                    : servicesLang === "EN"
+                    ? "Extra expenses or optional activities paid by the traveler."
+                    : "Frais restant à la charge du voyageur ou suppléments optionnels."}
                 </p>
               </div>
               <span className="text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-full border border-rose-200 dark:border-rose-500/20 self-start sm:self-center">
-                {formData.excludedServices?.length || 0} élément(s)
+                {activeExcludedList.length} élément(s)
               </span>
             </div>
 
-            {/* Suggestions Chips */}
+            {/* Suggestions */}
             <div className="space-y-1.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isAr ? "اقتراحات سريعة للإضافة بنقرة واحدة :" : "Suggestions rapides (cliquez pour ajouter) :"}
+                {servicesLang === "AR" ? "اقتراحات سريعة :" : "Suggestions rapides :"}
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {suggestedExcludedTags.map((tag, idx) => {
-                  const isAdded = (formData.excludedServices || []).includes(tag);
+                {suggestedExcludedTags[servicesLang].map((tag, idx) => {
+                  const isAdded = activeExcludedList.includes(tag);
                   return (
                     <button
                       key={idx}
@@ -1689,19 +2089,19 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               </div>
             </div>
 
-            {/* Input Add Form */}
+            {/* Input */}
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder={isAr ? "أضف خدمة غير مشمولة (مثال: مصاريف شخصية، إكراميات...)" : "Saisir une prestation non incluse..."}
+                dir={servicesLang === "AR" ? "rtl" : "ltr"}
+                placeholder={
+                  servicesLang === "AR" ? "أضف خدمة غير مشمولة..." :
+                  servicesLang === "EN" ? "Add an excluded service..." :
+                  "Saisir une prestation non incluse..."
+                }
                 value={newExcludedInput}
                 onChange={(e) => setNewExcludedInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddExcluded();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExcluded(); } }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none text-sm transition"
               />
               <button
@@ -1710,60 +2110,33 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                 className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>{isAr ? "إضافة" : "Ajouter"}</span>
+                <span>{servicesLang === "AR" ? "إضافة" : "Ajouter"}</span>
               </button>
             </div>
 
-            {/* List of Excluded Items */}
+            {/* List */}
             <div className="space-y-2">
-              {(!formData.excludedServices || formData.excludedServices.length === 0) ? (
+              {activeExcludedList.length === 0 ? (
                 <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500">
-                  {isAr ? "لا توجد عناصر غير مشمولة محددة حتى الآن." : "Aucune prestation non incluse configurée."}
+                  {servicesLang === "AR" ? "لا توجد عناصر غير مشمولة." :
+                   servicesLang === "EN" ? "No excluded services configured." :
+                   "Aucune prestation non incluse configurée."}
                 </div>
               ) : (
-                formData.excludedServices.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-rose-400 dark:hover:border-rose-600 transition group"
-                  >
-                    <span className="w-6 h-6 rounded-lg bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold text-xs flex items-center justify-center shrink-0">
-                      {index + 1}
-                    </span>
-
+                activeExcludedList.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-rose-400 dark:hover:border-rose-600 transition group">
+                    <span className="w-6 h-6 rounded-lg bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold text-xs flex items-center justify-center shrink-0">{index + 1}</span>
                     <input
                       type="text"
+                      dir={servicesLang === "AR" ? "rtl" : "ltr"}
                       value={item}
                       onChange={(e) => handleUpdateExcluded(index, e.target.value)}
                       className="flex-1 bg-transparent border-none text-xs sm:text-sm text-slate-900 dark:text-white outline-none font-medium focus:bg-white dark:focus:bg-slate-900 px-2 py-1 rounded"
                     />
-
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => handleMoveExcluded(index, "UP")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Monter"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === formData.excludedServices.length - 1}
-                        onClick={() => handleMoveExcluded(index, "DOWN")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Descendre"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveExcluded(index)}
-                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button type="button" disabled={index === 0} onClick={() => handleMoveExcluded(index, "UP")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowUp className="w-3.5 h-3.5" /></button>
+                      <button type="button" disabled={index === activeExcludedList.length - 1} onClick={() => handleMoveExcluded(index, "DOWN")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowDown className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => handleRemoveExcluded(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))
@@ -1771,33 +2144,41 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
             </div>
           </div>
 
-          {/* 3. QUE FAUT-IL APPORTER AVEC VOUS ? */}
+          {/* 3. ÉQUIPEMENTS & DOCUMENTS À APPORTER */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-900/40 p-6 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 dark:border-amber-900/30 pb-4">
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <Luggage className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                  <span>{isAr ? "ماذا تأخذ معك في الرحلة ؟ (المعدات والوثائق)" : "Que faut-il apporter avec vous ? (Équipements conseillés)"}</span>
+                  <span>
+                    {servicesLang === "AR"
+                      ? "ماذا تأخذ معك في الرحلة ؟ (المعدات والوثائق)"
+                      : servicesLang === "EN"
+                      ? "What to bring? (Equipment & Documents)"
+                      : "Que faut-il apporter avec vous ? (Équipements conseillés)"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {isAr 
-                    ? "الوثائق الإلزامية كبطاقة الهوية، والملابس المناسبة والأحذية المائية للحفاظ على سلامة وراحة المسافر." 
+                  {servicesLang === "AR"
+                    ? "الوثائق الإلزامية كبطاقة الهوية، والملابس المناسبة والأحذية المائية."
+                    : servicesLang === "EN"
+                    ? "Mandatory ID documents, appropriate clothing, water shoes, and recommended gear."
                     : "Documents d'identité obligatoires, vêtements adaptés, protection solaire et matériel recommandé."}
                 </p>
               </div>
               <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-500/20 self-start sm:self-center">
-                {formData.whatToBring?.length || 0} élément(s)
+                {activeWhatToBringList.length} élément(s)
               </span>
             </div>
 
-            {/* Suggestions Chips */}
+            {/* Suggestions */}
             <div className="space-y-1.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {isAr ? "اقتراحات سريعة للإضافة بنقرة واحدة :" : "Suggestions rapides (cliquez pour ajouter) :"}
+                {servicesLang === "AR" ? "اقتراحات سريعة :" : "Suggestions rapides :"}
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {suggestedWhatToBringTags.map((tag, idx) => {
-                  const isAdded = (formData.whatToBring || []).includes(tag);
+                {suggestedWhatToBringTags[servicesLang].map((tag, idx) => {
+                  const isAdded = activeWhatToBringList.includes(tag);
                   return (
                     <button
                       key={idx}
@@ -1818,19 +2199,19 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
               </div>
             </div>
 
-            {/* Input Add Form */}
+            {/* Input */}
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder={isAr ? "أضف تجهيزات موصى بها (مثال: حذاء مائي، معطف واق...)" : "Saisir un équipement ou document conseillé..."}
+                dir={servicesLang === "AR" ? "rtl" : "ltr"}
+                placeholder={
+                  servicesLang === "AR" ? "أضف تجهيزات موصى بها..." :
+                  servicesLang === "EN" ? "Add recommended equipment or document..." :
+                  "Saisir un équipement ou document conseillé..."
+                }
                 value={newWhatToBringInput}
                 onChange={(e) => setNewWhatToBringInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddWhatToBring();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddWhatToBring(); } }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm transition"
               />
               <button
@@ -1839,60 +2220,33 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                 className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>{isAr ? "إضافة" : "Ajouter"}</span>
+                <span>{servicesLang === "AR" ? "إضافة" : "Ajouter"}</span>
               </button>
             </div>
 
-            {/* List of What To Bring Items */}
+            {/* List */}
             <div className="space-y-2">
-              {(!formData.whatToBring || formData.whatToBring.length === 0) ? (
+              {activeWhatToBringList.length === 0 ? (
                 <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500">
-                  {isAr ? "لم يتم تحديد أي معدات موصى بها بعد." : "Aucun équipement recommandé configuré."}
+                  {servicesLang === "AR" ? "لم يتم تحديد أي معدات موصى بها بعد." :
+                   servicesLang === "EN" ? "No equipment configured yet." :
+                   "Aucun équipement recommandé configuré."}
                 </div>
               ) : (
-                formData.whatToBring.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-600 transition group"
-                  >
-                    <span className="w-6 h-6 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">
-                      {index + 1}
-                    </span>
-
+                activeWhatToBringList.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-600 transition group">
+                    <span className="w-6 h-6 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">{index + 1}</span>
                     <input
                       type="text"
+                      dir={servicesLang === "AR" ? "rtl" : "ltr"}
                       value={item}
                       onChange={(e) => handleUpdateWhatToBring(index, e.target.value)}
                       className="flex-1 bg-transparent border-none text-xs sm:text-sm text-slate-900 dark:text-white outline-none font-medium focus:bg-white dark:focus:bg-slate-900 px-2 py-1 rounded"
                     />
-
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => handleMoveWhatToBring(index, "UP")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Monter"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === formData.whatToBring.length - 1}
-                        onClick={() => handleMoveWhatToBring(index, "DOWN")}
-                        className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
-                        title="Descendre"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveWhatToBring(index)}
-                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button type="button" disabled={index === 0} onClick={() => handleMoveWhatToBring(index, "UP")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowUp className="w-3.5 h-3.5" /></button>
+                      <button type="button" disabled={index === activeWhatToBringList.length - 1} onClick={() => handleMoveWhatToBring(index, "DOWN")} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"><ArrowDown className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => handleRemoveWhatToBring(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))

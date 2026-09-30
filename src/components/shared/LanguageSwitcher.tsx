@@ -49,24 +49,24 @@ export function LanguageSwitcher({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-tp-line hover:border-tp-cyan text-xs font-bold text-tp-midnight bg-white/80 backdrop-blur-sm transition-all shadow-tp-sm hover:shadow-md"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:border-tp-cyan text-xs font-bold text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm transition-all shadow-xs hover:shadow-md cursor-pointer"
         aria-label="Change language"
       >
         <span>{currentLang.flag}</span>
         <span className="uppercase font-extrabold">{currentLang.label}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-tp-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-36 bg-white rounded-2xl shadow-tp-xl border border-tp-line/80 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-36 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
           {languages.map((lang) => (
             <button
               key={lang.code}
               onClick={() => handleLanguageChange(lang.code)}
-              className={`w-full px-3.5 py-2 text-start text-xs font-bold flex items-center justify-between transition-colors ${
+              className={`w-full px-3.5 py-2 text-start text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
                 locale === lang.code
-                  ? "bg-tp-cyan-tint text-tp-cyan-hover"
-                  : "text-tp-midnight hover:bg-tp-cream/60"
+                  ? "bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400"
+                  : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
               <span className="flex items-center gap-2">
@@ -76,7 +76,7 @@ export function LanguageSwitcher({
                 </span>
               </span>
               {locale === lang.code && (
-                <span className="w-1.5 h-1.5 rounded-full bg-tp-cyan" />
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
               )}
             </button>
           ))}

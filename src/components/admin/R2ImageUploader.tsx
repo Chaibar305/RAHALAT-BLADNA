@@ -9,7 +9,7 @@ import {
 interface R2ImageUploaderProps {
   value?: string;
   onChange: (url: string) => void;
-  folder?: "trips" | "receipts" | "invoices" | "documents" | "avatars";
+  folder?: "trips" | "blog" | "receipts" | "invoices" | "documents" | "avatars";
   label?: string;
   aspectRatio?: "video" | "square" | "cover";
   autoOptimizeWebp?: boolean;

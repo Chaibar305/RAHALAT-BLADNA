@@ -15,6 +15,71 @@ export async function getInvoiceData(
   isPartnerDocument?: boolean
 ): Promise<InvoicePdfData> {
   try {
+    // 1. Recherche prioritaire dans les documents financiers officiels (FinancialDocument)
+    const finDoc = await (prisma as any).financialDocument.findFirst({
+      where: {
+        OR: [{ id: invoiceIdOrNumber }, { documentNumber: invoiceIdOrNumber }],
+      },
+    });
+
+    if (finDoc) {
+      const itemsList: InvoiceItem[] = Array.isArray(finDoc.items)
+        ? (finDoc.items as any[]).map((it) => ({
+            description: it.description || "Prestation Touristique",
+            quantity: Number(it.quantity) || 1,
+            unitPrice: Number(it.unitPriceMAD ?? it.unitPrice ?? 0),
+            total: Number(it.totalMAD ?? it.total ?? 0),
+          }))
+        : [
+            {
+              description: finDoc.tripTitle || "Prestation Touristique",
+              quantity: finDoc.participantsCount || 1,
+              unitPrice: Math.round(finDoc.totalTTC / (finDoc.participantsCount || 1)),
+              total: finDoc.totalTTC,
+            },
+          ];
+
+      const docTypeLabel = finDoc.type === "QUOTE_B2B"
+        ? "DEVIS"
+        : finDoc.status === "PAID"
+        ? "FACTURE_SOLDE"
+        : "FACTURE_ACOMPTE";
+
+      return {
+        documentType: docTypeLabel as any,
+        documentNumber: finDoc.documentNumber,
+        bookingNumber: finDoc.bookingId || finDoc.documentNumber,
+        issuedAt: new Date(finDoc.issueDate || finDoc.createdAt).toLocaleDateString("fr-FR"),
+        dueDate: finDoc.validUntil ? new Date(finDoc.validUntil).toLocaleDateString("fr-FR") : undefined,
+        isPartnerDocument: isPartnerDocument !== undefined ? isPartnerDocument : finDoc.type === "QUOTE_B2B",
+
+        clientName: finDoc.clientName,
+        clientCompany: finDoc.companyName || undefined,
+        ice: finDoc.ice || undefined,
+        taxId: finDoc.taxId || undefined,
+        rcNumber: finDoc.rcNumber || undefined,
+        clientCin: finDoc.ice ? `ICE: ${finDoc.ice}` : (finDoc.taxId ? `IF: ${finDoc.taxId}` : undefined),
+        clientPhone: finDoc.clientPhone,
+        clientEmail: finDoc.clientEmail,
+        clientAddress: finDoc.clientAddress || undefined,
+
+        tripTitle: finDoc.tripTitle,
+        travelDates: finDoc.tripDate ? new Date(finDoc.tripDate).toLocaleDateString("fr-FR") : "Date à convenir",
+        passengerCount: finDoc.participantsCount || 1,
+
+        items: itemsList,
+        subtotalHt: finDoc.subtotalHT,
+        vatRate: finDoc.vatRate,
+        vatAmount: finDoc.vatAmount,
+        totalTtc: finDoc.totalTTC,
+        depositPaid: finDoc.depositAmount,
+        remainingBalance: finDoc.remainingAmount,
+        notes: finDoc.notes || undefined,
+        verificationUrl: `https://rahalatbladna.ma/verify/${finDoc.documentNumber}`,
+      };
+    }
+
+    // 2. Recherche dans la table Invoice legacy
     const inv = await prisma.invoice.findFirst({
       where: {
         OR: [{ id: invoiceIdOrNumber }, { number: invoiceIdOrNumber }],
@@ -228,6 +293,70 @@ export async function getInvoicesListAction() {
   await requireAdminSession("VIEW_FINANCES");
 
   try {
+    // 1. Documents financiers officiels (Nouveau système Factures & Devis B2B)
+    const dbFinDocs: any[] = await (prisma as any).financialDocument.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    const finInvoices = dbFinDocs
+      .filter((d: any) => d.type === "INVOICE")
+      .map((d: any) => ({
+        id: d.id,
+        invoiceNumber: d.documentNumber,
+        bookingId: d.bookingId || null,
+        type: d.status === "PAID" ? ("FACTURE_SOLDE" as const) : ("FACTURE_ACOMPTE" as const),
+        status: d.status,
+        clientName: d.clientName,
+        clientPhone: d.clientPhone || "",
+        clientEmail: d.clientEmail || "",
+        clientCompany: d.companyName || "",
+        clientCin: d.ice ? `ICE: ${d.ice}` : (d.taxId ? `IF: ${d.taxId}` : ""),
+        ice: d.ice || "",
+        taxId: d.taxId || "",
+        rcNumber: d.rcNumber || "",
+        tripTitle: d.tripTitle,
+        travelDates: d.tripDate ? new Date(d.tripDate).toLocaleDateString("fr-FR") : "Date à convenir",
+        passengerCount: d.participantsCount,
+        totalHt: Number(d.subtotalHT),
+        tvaAmount: Number(d.vatAmount),
+        totalTtcMad: Number(d.totalTTC),
+        depositPaidMad: Number(d.depositAmount),
+        remainingBalanceMad: Number(d.remainingAmount),
+        pdfUrl: d.pdfUrl || `/api/invoices/${d.documentNumber}/download`,
+        issuedAt: new Date(d.issueDate || d.createdAt).toLocaleDateString("fr-FR"),
+        isFinancialDocument: true,
+      }));
+
+    const finQuotes = dbFinDocs
+      .filter((d: any) => d.type === "QUOTE_B2B")
+      .map((d: any) => ({
+        id: d.id,
+        invoiceNumber: d.documentNumber,
+        bookingId: d.bookingId || null,
+        type: "DEVIS" as const,
+        status: d.status,
+        clientName: d.clientName,
+        clientPhone: d.clientPhone || "",
+        clientEmail: d.clientEmail || "",
+        clientCompany: d.companyName || "",
+        clientCin: d.ice ? `ICE: ${d.ice}` : (d.taxId ? `IF: ${d.taxId}` : ""),
+        ice: d.ice || "",
+        taxId: d.taxId || "",
+        rcNumber: d.rcNumber || "",
+        tripTitle: d.tripTitle,
+        travelDates: d.tripDate ? new Date(d.tripDate).toLocaleDateString("fr-FR") : "Date à convenir",
+        passengerCount: d.participantsCount,
+        totalHt: Number(d.subtotalHT),
+        tvaAmount: Number(d.vatAmount),
+        totalTtcMad: Number(d.totalTTC),
+        depositPaidMad: Number(d.depositAmount),
+        remainingBalanceMad: Number(d.remainingAmount),
+        pdfUrl: d.pdfUrl || `/api/invoices/${d.documentNumber}/download`,
+        issuedAt: new Date(d.issueDate || d.createdAt).toLocaleDateString("fr-FR"),
+        isFinancialDocument: true,
+      }));
+
+    // 2. Documents Legacy (Invoice & Quote générés depuis Réservations)
     const dbInvoices = await prisma.invoice.findMany({
       orderBy: { issuedAt: "desc" },
       include: {
@@ -255,14 +384,8 @@ export async function getInvoicesListAction() {
       },
     });
 
-    const validPayments = await prisma.payment.findMany({
-      where: {
-        status: PaymentStatus.VERIFIED,
-      },
-    });
-
-    // Formatage strict des Factures
-    const formattedInvoices = dbInvoices.map((inv) => ({
+    // Formatage strict des Factures Legacy
+    const legacyInvoices = dbInvoices.map((inv) => ({
       id: inv.id,
       invoiceNumber: inv.number,
       bookingId: inv.booking?.reference || null,
@@ -271,6 +394,11 @@ export async function getInvoicesListAction() {
       clientName: inv.booking?.user?.fullName || inv.booking?.user?.name || "Client",
       clientPhone: inv.booking?.user?.phone || "",
       clientEmail: inv.booking?.user?.email || "",
+      clientCompany: "",
+      clientCin: inv.booking?.user?.cinOrPassport || "",
+      ice: "",
+      taxId: "",
+      rcNumber: "",
       tripTitle: inv.booking?.trip?.titleFr || "Circuit Maroc",
       travelDates: inv.booking?.departureDate
         ? `${new Date(inv.booking.departureDate.startDate).toLocaleDateString("fr-FR")} au ${new Date(inv.booking.departureDate.endDate).toLocaleDateString("fr-FR")}`
@@ -283,10 +411,11 @@ export async function getInvoicesListAction() {
       remainingBalanceMad: Number(inv.balanceDue),
       pdfUrl: inv.pdfUrl || `/api/invoices/${inv.number}/download`,
       issuedAt: new Date(inv.issuedAt).toLocaleDateString("fr-FR"),
+      isFinancialDocument: false,
     }));
 
-    // Formatage strict des Devis
-    const formattedQuotes = dbQuotes.map((q) => ({
+    // Formatage strict des Devis Legacy
+    const legacyQuotes = dbQuotes.map((q) => ({
       id: q.id,
       invoiceNumber: q.number,
       bookingId: q.booking?.reference || null,
@@ -295,6 +424,11 @@ export async function getInvoicesListAction() {
       clientName: q.booking?.user?.fullName || "Prospect B2B",
       clientPhone: q.booking?.user?.phone || "",
       clientEmail: q.booking?.user?.email || "",
+      clientCompany: "",
+      clientCin: "",
+      ice: "",
+      taxId: "",
+      rcNumber: "",
       tripTitle: q.booking?.trip?.titleFr || "Devis Sur-Mesure",
       travelDates: "Date à confirmer",
       passengerCount: q.booking?.travelers?.length || 1,
@@ -305,7 +439,12 @@ export async function getInvoicesListAction() {
       remainingBalanceMad: Number(q.totalTTC),
       pdfUrl: q.pdfUrl || `/api/invoices/${q.number}/download`,
       issuedAt: new Date(q.createdAt).toLocaleDateString("fr-FR"),
+      isFinancialDocument: false,
     }));
+
+    // Fusion avec priorité aux documents financiers officiels
+    const formattedInvoices = [...finInvoices, ...legacyInvoices];
+    const formattedQuotes = [...finQuotes, ...legacyQuotes];
 
     // Calculs financiers stricts : UNIQUEMENT SUR LES FACTURES (invoices.status != ANNULEE)
     const activeInvoices = formattedInvoices.filter((i) => i.status !== "ANNULEE");

@@ -18,6 +18,7 @@ enum UserRole {
   AGENCY_ADMIN    // Directeur / Manager d'agence de voyage
   AGENCY_STAFF    // Agent de réservation / commercial
   TOUR_LEADER     // Accompagnateur de voyage / Guide
+  STAFF           // Collaborateur d'équipe terrain / support / marketing
   CLIENT          // Voyageur
 }
 
@@ -191,17 +192,32 @@ model Trip {
   minSeatsRequired    Int                @default(15) // Seuil minimum garanti
   shortDescriptionFr  String
   shortDescriptionAr  String
+  shortDescriptionEn  String?
   longDescriptionFr   String             @db.Text
   longDescriptionAr   String             @db.Text
+  longDescriptionEn   String?            @db.Text
   overviewFr          String?            @db.Text // Aperçu & Philosophie en Français
   overviewAr          String?            @db.Text // Aperçu & Philosophie en Arabe
+  overviewEn          String?            @db.Text // Aperçu & Philosophie en Anglais
   showOverview        Boolean            @default(true) // Toggle visibilité sur la fiche publique
   includedServicesFr  String[]           @default([])
   includedServicesAr  String[]           @default([])
+  includedServicesEn  String[]           @default([])
   excludedServicesFr  String[]           @default([])
   excludedServicesAr  String[]           @default([])
+  excludedServicesEn  String[]           @default([])
   checklistItemsFr    String[]           @default([])
   checklistItemsAr    String[]           @default([])
+  checklistItemsEn    String[]           @default([])
+  includedFr          String[]           @default([])
+  includedAr          String[]           @default([])
+  includedEn          String[]           @default([])
+  excludedFr          String[]           @default([])
+  excludedAr          String[]           @default([])
+  excludedEn          String[]           @default([])
+  equipmentFr         String[]           @default([])
+  equipmentAr         String[]           @default([])
+  equipmentEn         String[]           @default([])
   includedServices    String[]           @default([])
   excludedServices    String[]           @default([])
   whatToBring         String[]           @default([])
@@ -236,6 +252,7 @@ model ItineraryDay {
   dayNumber     Int      @default(1)
   titleFr       String
   titleAr       String
+  titleEn       String?
   timeSlot      String?  // ex: "18h30 - 23h30" ou "09h00 - 13h00"
   locationName  String?
   location      String
@@ -243,6 +260,7 @@ model ItineraryDay {
   meals         String[]
   descriptionFr String   @db.Text
   descriptionAr String   @db.Text
+  descriptionEn String?  @db.Text
   activityTags  String[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -259,6 +277,7 @@ model TripPickupPoint {
   city            String?            // Alias flexible
   locationNameFr  String             // "Gare Casa-Voyageurs (Devant l'Ibis)"
   locationNameAr  String?            // "محطة الدار البيضاء المسافرين"
+  locationNameEn  String?
   locationName    String?            // Alias flexible
   googleMapsUrl   String?
   departureTime   String             // "06:00" ou "18:30"
@@ -310,9 +329,11 @@ model TripAddon {
   trip            Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
   nameFr          String           // "Session Quad 1h au coucher de soleil"
   nameAr          String           // "جولة كواد في الرمال لمدة ساعة"
+  nameEn          String?
   price           Decimal          @db.Decimal(10, 2) // Prix en MAD
   descriptionFr   String?
   descriptionAr   String?
+  descriptionEn   String?
   isPerPerson     Boolean          @default(true)
   isActive        Boolean          @default(true)
 
@@ -324,11 +345,15 @@ model TripAddon {
 // ====================================================
 
 enum TeamRole {
-  SUPER_ADMIN     // Accès total (Finances, Paramètres, Suppression, Tous circuits)
-  ORGANIZER       // Gestion des circuits, réservations et prestataires
-  TOUR_LEADER     // Chef de voyage / Coordinateur de groupe (Scan + Manifeste)
-  OFFICIAL_GUIDE  // Guide de tourisme agréé (Scan + Feuille de route TIST)
-  DRIVER          // Chauffeur transport touristique (Pointage ramassage)
+  TOUR_LEADER          // Chef d'expédition & coordinateur
+  OFFICIAL_GUIDE       // Guide Officiel agréé
+  PRO_DRIVER           // Chauffeur Pro autocar / minibus
+  DRIVER               // Chauffeur transport touristique (Pointage ramassage)
+  ORGANIZER            // Organisateur circuits & logistique
+  SUPER_ADMIN          // Direction générale & accès total
+  CONFIRMATION_AGENT   // Agent(e) de confirmation d'appels & réservations
+  MEDIA_BUYER          // Responsable acquisition publicitaire (Meta, TikTok, Google Ads)
+  PHOTOGRAPHER_VIDEOGRAPHER // Photographe & Vidéaste de terrain (Reels, Drone, Shooting)
 }
 
 model TeamMember {
@@ -344,13 +369,19 @@ model TeamMember {
   notes           String?
   
   // Permissions directes
-  canScanTickets  Boolean      @default(true)  // Droit d'utiliser la caméra pour pointer
-  canViewManifest Boolean      @default(true)  // Droit de consulter la liste des passagers
-  canCollectCash  Boolean      @default(false) // Droit d'encaisser le solde restant au départ
-  canEditTrips    Boolean      @default(false) // Droit de modifier le programme
+  canScanTickets   Boolean      @default(true)  // Droit d'utiliser la caméra pour pointer (/admin/scanner)
+  canViewManifest  Boolean      @default(true)  // Droit de consulter la liste des passagers (/admin/manifests)
+  canCollectCash   Boolean      @default(false) // Droit d'encaisser le solde restant au départ
+  canEditTrips     Boolean      @default(false) // Droit de modifier le programme (/admin/trips)
+  canManageBookings Boolean     @default(false) // Gestion appels, leads & validation acomptes (/admin/bookings)
+  canViewAnalytics Boolean      @default(false) // Suivi trafic, conversion & ROAS Ads (/admin/analytics)
+  canManageBlog    Boolean      @default(false) // Rédaction articles & médias R2 (/admin/blog)
+  canManageFinances Boolean     @default(false) // Devis B2B, factures & grand livre (/admin/finances)
+  permissions      String[]     @default([])    // Clés de permissions granulaires (ex: SCANNER_QR, VIEW_ANALYTICS)
   
   isActive        Boolean      @default(true)  // Activation / Suspension immédiate
   assignedTrips   TripStaff[]  // Circuits assignés
+  confirmedBookings Booking[]   @relation("ConfirmedBookings") // Réservations confirmées par cet agent
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -472,6 +503,17 @@ enum TravelerCategory {
   ENFANT
 }
 
+enum CallStatus {
+  PENDING_CALL          // Nouveau prospect à contacter
+  NO_ANSWER_1           // Ne répond pas (Tentative 1)
+  NO_ANSWER_2           // Ne répond pas (Tentative 2)
+  CALLBACK_SCHEDULED    // À rappeler (horaire convenu)
+  CONFIRMED_PHONE       // Accord verbal donné (en attente d'acompte)
+  DEPOSIT_RECEIVED      // Acompte payé & validé
+  CANCELLED_REFUSED     // Refusé / Désistement / Pas intéressé
+  WRONG_NUMBER          // Faux numéro
+}
+
 model Booking {
   id              String        @id @default(cuid())
   reference       String        @unique // Ex: RB-2026-000125
@@ -486,8 +528,30 @@ model Booking {
   paymentStatus   PaymentStatus @default(PENDING)
   qrCodeToken     String?       @unique @default(cuid())
   notes           String?
+  source          String?       // Canal d'acquisition (Meta Ads, TikTok Ads, Google Ads, WhatsApp, Direct)
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
   cancelledAt     DateTime?
   cancellationReason String?
+
+  // Suivi Téléphonique (CRM Appels)
+  callStatus            CallStatus      @default(PENDING_CALL)
+  callAttemptsCount     Int             @default(0)
+  lastCallDate          DateTime?
+  nextCallbackDate      DateTime?       // Date et heure du rappel programmé
+  callNotes             String?         @db.Text
+
+  // Agent ayant pris en charge le dossier
+  confirmedByMemberId   String?
+  confirmedByMember     TeamMember?     @relation("ConfirmedBookings", fields: [confirmedByMemberId], references: [id], onDelete: SetNull)
+  contactedAt           DateTime?
+
+  // Pickup et détails convenus au téléphone
+  pickupCity            String?         // Ex: Rabat, Casablanca, Kénitra
+  pickupPoint           String?         // Ex: Gare Rabat Ville, Marjane Californie
+  roomPreference        String?         // Ex: Chambre Double, Lits séparés, Single
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -503,6 +567,9 @@ model Booking {
   @@index([tripId])
   @@index([departureDateId])
   @@index([reference])
+  @@index([confirmedByMemberId])
+  @@index([callStatus])
+  @@index([nextCallbackDate])
 }
 
 model Traveler {
@@ -574,6 +641,65 @@ model Invoice {
   updatedAt   DateTime      @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+enum DocumentType {
+  INVOICE         // Facture officielle d'acompte ou de solde
+  QUOTE_B2B       // Devis estimatif B2B pour entreprise
+}
+
+enum DocumentStatus {
+  DRAFT           // Brouillon
+  SENT            // Envoyé au client
+  PAID            // Payé (Facture)
+  ACCEPTED        // Devis validé / accepté
+  REJECTED        // Refusé
+  CANCELLED       // Annulé
+}
+
+model FinancialDocument {
+  id                String          @id @default(cuid())
+  documentNumber    String          @unique // Ex: DEV-2026-0001 ou FAC-2026-0001
+  type              DocumentType    @default(QUOTE_B2B)
+  status            DocumentStatus  @default(DRAFT)
+  
+  // Informations Client / Société (Entreprise Marocaine B2B)
+  clientName        String          // Nom du contact ou Raison Sociale
+  companyName       String?         // Nom de la société cliente
+  ice               String?         // Identifiant Commun de l'Entreprise (15 chiffres obligatoire au Maroc)
+  taxId             String?         // Identifiant Fiscal (IF)
+  rcNumber          String?         // Registre de Commerce
+  clientEmail       String
+  clientPhone       String          // Téléphone / WhatsApp
+  clientAddress     String?
+
+  // Détails de la prestation
+  tripTitle         String          // Nom du circuit ou intitulé de l'événement sur-mesure
+  tripDate          DateTime?       // Date prévue de l'escapade
+  participantsCount Int             @default(1)
+
+  // Ventilation Financière en Dirhams (MAD)
+  items             Json            // Tableau d'articles: [{ description, quantity, unitPriceMAD, totalMAD }]
+  subtotalHT        Float           @default(0) // Montant Hors Taxes
+  vatRate           Float           @default(0) // Taux TVA (0% pour auto-entrepreneur / agence selon régime, ou 20%)
+  vatAmount         Float           @default(0) // Montant TVA
+  totalTTC          Float           @default(0) // Total Toutes Taxes Comprises
+  depositAmount     Float           @default(0) // Acompte versé ou exigé
+  remainingAmount   Float           @default(0) // Reste à payer au départ
+
+  // Validité & Archivage
+  issueDate         DateTime        @default(now())
+  validUntil        DateTime?       // Date de validité du devis
+  pdfUrl            String?         // URL Cloudflare R2 du PDF généré
+  notes             String?         @db.Text
+  
+  // Relations optionnelles
+  bookingId         String?         @unique
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([type, status])
+  @@index([createdAt])
 }
 
 enum PaymentType {

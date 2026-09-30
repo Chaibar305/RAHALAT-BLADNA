@@ -265,19 +265,33 @@ export function TripStaffManager({
               <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                 {isAr ? "الدور في هذا المسار" : "Rôle sur ce convoi"}
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {(["TOUR_LEADER", "OFFICIAL_GUIDE", "DRIVER", "ORGANIZER", "SUPER_ADMIN"] as TeamRole[]).map((r) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(["TOUR_LEADER", "OFFICIAL_GUIDE", "DRIVER", "PHOTOGRAPHER_VIDEOGRAPHER", "ORGANIZER", "CONFIRMATION_AGENT", "MEDIA_BUYER", "SUPER_ADMIN"] as TeamRole[]).map((r) => (
                   <button
                     key={r}
                     type="button"
                     onClick={() => handleRoleChange(r)}
                     className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold text-center transition ${
                       selectedRole === r
-                        ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-500 text-cyan-700 dark:text-cyan-300"
+                        ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-500 text-cyan-700 dark:text-cyan-300 shadow-sm"
                         : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                     }`}
                   >
-                    {r === "TOUR_LEADER" ? "Chef de voyage" : r === "OFFICIAL_GUIDE" ? "Guide officiel" : r === "DRIVER" ? "Chauffeur" : r === "ORGANIZER" ? "Organisateur" : "Super Admin"}
+                    {r === "TOUR_LEADER"
+                      ? isAr ? "رئيس رحلة" : "Tour Leader"
+                      : r === "OFFICIAL_GUIDE"
+                      ? isAr ? "مرشد معتمد" : "Guide officiel"
+                      : r === "DRIVER" || (r as any) === "PRO_DRIVER"
+                      ? isAr ? "سائق محترف" : "Chauffeur"
+                      : r === "PHOTOGRAPHER_VIDEOGRAPHER"
+                      ? isAr ? "مصور / فيديو" : "Photographe / Vidéo"
+                      : r === "ORGANIZER"
+                      ? isAr ? "منظم رحلات" : "Organisateur"
+                      : r === "CONFIRMATION_AGENT"
+                      ? isAr ? "تأكيد حجوزات" : "Agent Confirmation"
+                      : r === "MEDIA_BUYER"
+                      ? isAr ? "مسؤول إعلانات" : "Media Buyer"
+                      : "Super Admin"}
                   </button>
                 ))}
               </div>
@@ -388,12 +402,32 @@ export function TripStaffManager({
                             ? "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400 border border-purple-300 dark:border-purple-500/30"
                             : item.role === "OFFICIAL_GUIDE"
                             ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30"
-                            : item.role === "DRIVER"
+                            : item.role === "DRIVER" || (item.role as any) === "PRO_DRIVER"
                             ? "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30"
+                            : item.role === "CONFIRMATION_AGENT"
+                            ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30"
+                            : item.role === "MEDIA_BUYER"
+                            ? "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400 border border-violet-300 dark:border-violet-500/30"
+                            : item.role === "PHOTOGRAPHER_VIDEOGRAPHER"
+                            ? "bg-fuchsia-100 dark:bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-400 border border-fuchsia-300 dark:border-fuchsia-500/30"
                             : "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/30"
                         }`}
                       >
-                        {item.role === "TOUR_LEADER" ? "Chef de voyage" : item.role === "OFFICIAL_GUIDE" ? "Guide officiel" : item.role === "DRIVER" ? "Chauffeur" : item.role === "ORGANIZER" ? "Organisateur" : "Super Admin"}
+                        {item.role === "TOUR_LEADER"
+                          ? "Chef de voyage"
+                          : item.role === "OFFICIAL_GUIDE"
+                          ? "Guide officiel"
+                          : item.role === "DRIVER" || (item.role as any) === "PRO_DRIVER"
+                          ? "Chauffeur"
+                          : item.role === "PHOTOGRAPHER_VIDEOGRAPHER"
+                          ? "Photographe / Vidéo"
+                          : item.role === "ORGANIZER"
+                          ? "Organisateur"
+                          : item.role === "CONFIRMATION_AGENT"
+                          ? "Agent Confirmation"
+                          : item.role === "MEDIA_BUYER"
+                          ? "Media Buyer"
+                          : "Super Admin"}
                       </span>
                     </div>
 

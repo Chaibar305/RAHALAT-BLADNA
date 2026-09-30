@@ -54,6 +54,14 @@ export interface InvoicePdfData {
   verificationUrl?: string;
   notes?: string;
 
+  // Spécifique B2B & Entreprises Marocaines
+  ice?: string; // Identifiant Commun de l'Entreprise (15 chiffres)
+  taxId?: string; // Identifiant Fiscal
+  rcNumber?: string; // Registre de Commerce
+  subtotalHt?: number;
+  vatRate?: number;
+  vatAmount?: number;
+
   // Compatibilité optionnelle
   totalHt?: number;
   tvaRate?: number;
@@ -264,17 +272,27 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7.5);
   let clientLineY = startY + 18.5;
-  if (data.clientCin) {
+  if (data.ice) {
+    doc.text(`ICE : ${data.ice}`, 18, clientLineY);
+    clientLineY += 4.5;
+  }
+  if (data.taxId || data.rcNumber) {
+    const ids: string[] = [];
+    if (data.taxId) ids.push(`IF : ${data.taxId}`);
+    if (data.rcNumber) ids.push(`RC : ${data.rcNumber}`);
+    doc.text(ids.join("  |  "), 18, clientLineY);
+    clientLineY += 4.5;
+  } else if (data.clientCin) {
     doc.text(`N° CIN / Passeport : ${data.clientCin}`, 18, clientLineY);
-    clientLineY += 5;
+    clientLineY += 4.5;
   }
-  if (data.clientPhone) {
-    doc.text(`Téléphone : ${data.clientPhone}`, 18, clientLineY);
-    clientLineY += 5;
+  if (data.clientPhone && clientLineY <= startY + 31) {
+    doc.text(`Tél : ${data.clientPhone}`, 18, clientLineY);
+    clientLineY += 4.5;
   }
-  if (data.clientEmail) {
+  if (data.clientEmail && clientLineY <= startY + 31) {
     doc.text(`Email : ${data.clientEmail}`, 18, clientLineY);
-    clientLineY += 5;
+    clientLineY += 4.5;
   }
   if (data.clientAddress && clientLineY <= startY + 33) {
     doc.text(formatArabic(`Adresse : ${data.clientAddress}`), 18, clientLineY);
@@ -415,19 +433,39 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setDrawColor(220, 225, 230);
   doc.roundedRect(totalsBoxX, finalY, totalsBoxWidth, sectionHeight, 3, 3, "D");
 
-  // 1. Montant Total de la Prestation (MAD)
-  doc.setFont("Amiri", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...COLOR_SLATE);
-  doc.text("Total Prestation (MAD) :", totalsBoxX + 4, finalY + 8);
-  doc.text(`${data.totalTtc.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 8, { align: "right" });
+  const hasVat = Boolean(data.vatAmount && data.vatAmount > 0);
 
-  // 2. Acompte Réglé
-  doc.setFont("Amiri", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...COLOR_DARK_CYAN);
-  doc.text("Acompte Réglé :", totalsBoxX + 4, finalY + 16.5);
-  doc.text(`${data.depositPaid.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 16.5, { align: "right" });
+  if (hasVat) {
+    const htAmount = data.subtotalHt || data.totalHt || (data.totalTtc - (data.vatAmount || 0));
+    doc.setFont("Amiri", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLOR_SLATE);
+    doc.text("Total HT :", totalsBoxX + 4, finalY + 6.5);
+    doc.text(`${Math.round(htAmount).toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 6.5, { align: "right" });
+
+    doc.text(`TVA (${data.vatRate || 20}%) :`, totalsBoxX + 4, finalY + 12);
+    doc.text(`${Math.round(data.vatAmount || 0).toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 12, { align: "right" });
+
+    doc.setFont("Amiri", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR_MIDNIGHT);
+    doc.text("Total TTC :", totalsBoxX + 4, finalY + 17.5);
+    doc.text(`${data.totalTtc.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 17.5, { align: "right" });
+  } else {
+    // 1. Montant Total de la Prestation (MAD)
+    doc.setFont("Amiri", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR_SLATE);
+    doc.text("Total Prestation (MAD) :", totalsBoxX + 4, finalY + 8);
+    doc.text(`${data.totalTtc.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 8, { align: "right" });
+
+    // 2. Acompte Réglé
+    doc.setFont("Amiri", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR_DARK_CYAN);
+    doc.text("Acompte Réglé :", totalsBoxX + 4, finalY + 16.5);
+    doc.text(`${data.depositPaid.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 16.5, { align: "right" });
+  }
 
   // 3. Solde Dû au Départ (Bandeau de mise en valeur)
   doc.setFillColor(...COLOR_MIDNIGHT);
@@ -436,7 +474,7 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFont("Amiri", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("Solde Dû au Départ :", totalsBoxX + 4, finalY + 29.5);
+  doc.text(data.documentType === "DEVIS" ? "Solde Prévu :" : "Solde Dû au Départ :", totalsBoxX + 4, finalY + 29.5);
 
   const balanceColor = data.remainingBalance > 0 ? COLOR_CYAN : [255, 255, 255];
   doc.setTextColor(balanceColor[0], balanceColor[1], balanceColor[2]);
@@ -448,17 +486,22 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   if (data.remainingBalance === 0) {
     doc.setTextColor(...COLOR_EMERALD);
     doc.text("✓ DOSSIER TOTALEMENT SOLDÉ", totalsBoxX + totalsBoxWidth / 2, finalY + 39, { align: "center" });
+  } else if (data.documentType === "DEVIS") {
+    doc.setTextColor(...COLOR_DARK_CYAN);
+    doc.text("DEVIS ESTIMATIF B2B EN DIRHAMS", totalsBoxX + totalsBoxWidth / 2, finalY + 39, { align: "center" });
   } else {
     doc.setTextColor(...COLOR_TERRACOTTA);
     doc.text("ACOMPTE VALIDÉ • SOLDE AU DÉPART", totalsBoxX + totalsBoxWidth / 2, finalY + 39, { align: "center" });
   }
 
-  // Mention Légale Obligatoire Franchise de TVA
+  // Mention Légale Obligatoire
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...COLOR_MUTED);
   doc.text(
-    "* TVA non applicable conformément aux dispositions du Code Général des Impôts (Régime de l'Auto-Entrepreneur).",
+    hasVat
+      ? "* Tarifs exprimés en Dirhams Marocains (MAD) toutes taxes comprises (TVA incluse)."
+      : "* TVA non applicable conformément aux dispositions du Code Général des Impôts (Régime de l'Auto-Entrepreneur / Franchise en base).",
     14,
     finalY + sectionHeight + 5.5
   );

@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { getInvoicesListAction } from "@/actions/invoice.actions";
 import { FinanceDocumentsManager } from "@/components/admin/finances/FinanceDocumentsManager";
+import { FinanceHeaderActions } from "@/components/admin/finances/FinanceHeaderActions";
 import { 
   CreditCard, TrendingUp, CheckCircle2, Clock, Sparkles 
 } from "lucide-react";
@@ -50,15 +51,7 @@ export default async function AdminFinancesPage({
           </p>
         </div>
 
-        <div className="flex items-center gap-3 z-10">
-          <Link
-            href={`/${locale}/trips`}
-            className="px-5 py-3 rounded-2xl bg-tp-cyan hover:bg-tp-cyan-hover text-white dark:text-slate-950 font-black text-xs sm:text-sm shadow-tp-cyan transition-all active:scale-95 flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>{isAr ? "إنشاء حجز / فاتورة جديدة" : "Nouveau Devis B2B"}</span>
-          </Link>
-        </div>
+        <FinanceHeaderActions locale={locale} />
       </div>
 
       {/* KPI Cards : CALCULÉS STRICTEMENT SUR LES FACTURES RÉELLES */}

@@ -840,6 +840,9 @@ export function AdminApplicationsManager({
                   <option value="OFFICIAL_GUIDE">Guide de tourisme officiel (Scan + TIST)</option>
                   <option value="ORGANIZER">Organisateur / Coordinateur (Gestion complète)</option>
                   <option value="DRIVER">Chauffeur touristique (Pointage)</option>
+                  <option value="PHOTOGRAPHER_VIDEOGRAPHER">Photographe & Vidéaste de voyage (Reels, Drone, Shooting)</option>
+                  <option value="CONFIRMATION_AGENT">Agent(e) de confirmation téléphonique</option>
+                  <option value="MEDIA_BUYER">Media Buyer / Responsable Publicité Digitale</option>
                 </select>
               </div>
 

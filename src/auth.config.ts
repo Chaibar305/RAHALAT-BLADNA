@@ -8,6 +8,11 @@ export const ALLOWED_ADMIN_ROLES = [
   "TOUR_LEADER",
   "OFFICIAL_GUIDE",
   "DRIVER",
+  "PRO_DRIVER",
+  "CONFIRMATION_AGENT",
+  "MEDIA_BUYER",
+  "PHOTOGRAPHER_VIDEOGRAPHER",
+  "STAFF",
 ];
 
 export const authConfig = {
@@ -26,6 +31,8 @@ export const authConfig = {
       const pathname = nextUrl.pathname;
       const isLoggedIn = !!auth?.user;
       const userRole = ((auth?.user?.role as string) || "").toUpperCase();
+      const isStaff = !!auth?.user?.isStaff;
+      const teamRole = ((auth?.user?.teamRole as string) || "").toUpperCase();
 
       const isAdminPath =
         pathname.startsWith("/admin") ||
@@ -39,9 +46,28 @@ export const authConfig = {
         pathname.startsWith("/ar/mon-compte") ||
         pathname.startsWith("/en/mon-compte");
 
+      const isAnalyticsPath = pathname.includes("/admin/analytics");
+
+      if (isAnalyticsPath) {
+        if (!isLoggedIn) return false;
+        const perms = auth?.user?.permissions;
+        const hasAnalytics =
+          perms?.canViewAnalytics ||
+          (Array.isArray(perms) && perms.includes("VIEW_ANALYTICS")) ||
+          (Array.isArray(perms?.list) && perms.list.includes("VIEW_ANALYTICS"));
+        const isSuperAdminOrMediaBuyer =
+          ["SUPER_ADMIN", "SUPERADMIN", "MEDIA_BUYER"].includes(userRole) ||
+          ["SUPER_ADMIN", "MEDIA_BUYER"].includes(teamRole);
+        return isSuperAdminOrMediaBuyer || !!hasAnalytics;
+      }
+
       if (isAdminPath) {
         if (!isLoggedIn) return false;
-        return ALLOWED_ADMIN_ROLES.includes(userRole);
+        return (
+          ALLOWED_ADMIN_ROLES.includes(userRole) ||
+          isStaff ||
+          (teamRole !== "" && ALLOWED_ADMIN_ROLES.includes(teamRole))
+        );
       }
 
       if (isAccountPath) {

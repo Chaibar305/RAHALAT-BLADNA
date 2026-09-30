@@ -30,7 +30,9 @@ export function Header() {
   const [mobileAuthTab, setMobileAuthTab] = useState<AuthTab>("LOGIN");
 
   const userRole = ((session?.user as any)?.role || "").toUpperCase();
-  const isAdmin = ["ADMIN", "SUPERADMIN", "SUPER_ADMIN", "AGENCY_ADMIN"].includes(userRole);
+  const isStaff = !!(session?.user as any)?.isStaff;
+  const teamRole = (((session?.user as any)?.teamRole as string) || "").toUpperCase();
+  const isAdmin = ["ADMIN", "SUPERADMIN", "SUPER_ADMIN", "AGENCY_ADMIN", "ORGANIZER"].includes(userRole) || isStaff || (teamRole !== "" && ["ORGANIZER", "TOUR_LEADER", "CONFIRMATION_AGENT", "MEDIA_BUYER"].includes(teamRole));
 
   useEffect(() => {
     const handleScroll = () => {
@@ -240,7 +242,7 @@ export function Header() {
                           className="py-2 px-3 rounded-xl bg-tp-cyan/10 text-tp-cyan hover:bg-tp-cyan/20 font-bold text-[11px] flex items-center justify-center gap-1.5 border border-tp-cyan/30"
                         >
                           <ShieldCheck className="w-3.5 h-3.5" />
-                          <span>{t("admin")}</span>
+                          <span>{isAr ? "لوحة الإدارة" : (isStaff && !["SUPER_ADMIN", "ADMIN"].includes(userRole) ? "Espace Pro" : t("admin"))}</span>
                         </Link>
                       ) : (
                         <button

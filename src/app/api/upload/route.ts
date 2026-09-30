@@ -19,6 +19,7 @@ const ALLOWED_MIME_TYPES: Record<string, { maxSize: number; category: "IMAGE" | 
 // Organisation stricte des sous-dossiers dans le bucket Cloudflare R2
 const ALLOWED_FOLDERS = [
   "trips",     // Photos des circuits et programmes journaliers
+  "blog",      // Photos et illustrations des articles de blog
   "receipts",  // Justificatifs de virement bancaire client
   "invoices",  // Factures et devis générés
   "documents", // Documents administratifs divers

@@ -18,6 +18,9 @@ import {
   Save,
   Link2,
   Award,
+  Video,
+  PhoneCall,
+  Megaphone,
 } from "lucide-react";
 import { TeamRole } from "@/types/enums";
 import {
@@ -41,6 +44,7 @@ interface TeamMemberModalProps {
   onSuccess: () => void;
   editingMember?: any | null;
   availableUsers: AvailableUser[];
+  isSuperAdmin?: boolean;
 }
 
 export function TeamMemberModal({
@@ -49,9 +53,11 @@ export function TeamMemberModal({
   onSuccess,
   editingMember,
   availableUsers,
+  isSuperAdmin = false,
 }: TeamMemberModalProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
+  const isEn = locale === "en";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,10 +115,31 @@ export function TeamMemberModal({
     setError(null);
   }, [editingMember, isOpen]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
+
+  const isTargetSuperAdmin = editingMember?.role === "SUPER_ADMIN";
 
   // Auto-ajustement des permissions recommandées lors du changement de rôle
   const handleRoleChange = (role: TeamRole) => {
+    if (isTargetSuperAdmin) {
+      setError(
+        isAr
+          ? "أمان : لا يمكن تغيير رتبة حساب المشرف العام"
+          : "Sécurité : Le rôle du compte Super Admin principal ne peut pas être modifié."
+      );
+      return;
+    }
+
     let defaults = {
       canScanTickets: true,
       canViewManifest: true,
@@ -148,10 +175,31 @@ export function TeamMemberModal({
         canCollectCash: false,
         canEditTrips: false,
       };
-    } else if (role === "DRIVER") {
+    } else if (role === "DRIVER" || role === "PRO_DRIVER") {
       defaults = {
         canScanTickets: true,
         canViewManifest: false,
+        canCollectCash: false,
+        canEditTrips: false,
+      };
+    } else if (role === "CONFIRMATION_AGENT") {
+      defaults = {
+        canScanTickets: false,
+        canViewManifest: true,
+        canCollectCash: false,
+        canEditTrips: false,
+      };
+    } else if (role === "MEDIA_BUYER") {
+      defaults = {
+        canScanTickets: false,
+        canViewManifest: false,
+        canCollectCash: false,
+        canEditTrips: false,
+      };
+    } else if (role === "PHOTOGRAPHER_VIDEOGRAPHER") {
+      defaults = {
+        canScanTickets: false,
+        canViewManifest: true,
         canCollectCash: false,
         canEditTrips: false,
       };
@@ -177,11 +225,30 @@ export function TeamMemberModal({
         throw new Error(isAr ? "يرجى إدخال رقم الهاتف" : "Le numéro de téléphone est obligatoire.");
       }
 
+      if (formData.role === "SUPER_ADMIN" && !isSuperAdmin) {
+        throw new Error(
+          isAr
+            ? "غير مصرح : صلاحيات المشرف العام مطلوبة لتعيين هذا الدور"
+            : "Action non autorisée : Privilèges Super Admin requis pour attribuer ce rôle."
+        );
+      }
+
+      const payload = {
+        ...formData,
+        role: isTargetSuperAdmin ? "SUPER_ADMIN" : formData.role,
+        isActive: isTargetSuperAdmin ? true : formData.isActive,
+        canScanTickets: isTargetSuperAdmin ? true : formData.canScanTickets,
+        canViewManifest: isTargetSuperAdmin ? true : formData.canViewManifest,
+        canCollectCash: isTargetSuperAdmin ? true : formData.canCollectCash,
+        canEditTrips: isTargetSuperAdmin ? true : formData.canEditTrips,
+        userId: formData.userId && formData.userId.trim() !== "" ? formData.userId.trim() : null,
+      };
+
       let res;
       if (editingMember) {
-        res = await updateTeamMemberAction(editingMember.id, formData);
+        res = await updateTeamMemberAction(editingMember.id, payload);
       } else {
-        res = await createTeamMemberAction(formData);
+        res = await createTeamMemberAction(payload);
       }
 
       if (!res.success) {
@@ -198,8 +265,16 @@ export function TeamMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-8">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200 cursor-pointer"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-8 cursor-default"
+      >
         {/* Header Modal */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
           <div className="flex items-center gap-3">
@@ -224,6 +299,7 @@ export function TeamMemberModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
           >
@@ -306,63 +382,160 @@ export function TeamMemberModal({
 
           {/* Rôle Principal */}
           <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Shield className="w-3.5 h-3.5" />
-              <span>{isAr ? "الدور والمسؤولية الميدانية" : "Rôle & Spécialisation"}</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Shield className="w-3.5 h-3.5" />
+                <span>
+                  {isAr
+                    ? "الدور والمسؤولية الميدانية"
+                    : isEn
+                    ? "Role & Field Specialization"
+                    : "Rôle & Spécialisation"}
+                </span>
+              </h3>
+              {isTargetSuperAdmin && (
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                  {isAr ? "حساب محمي" : "Compte Protégé"}
+                </span>
+              )}
+            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {isTargetSuperAdmin && (
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                <Shield className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>
+                  {isAr
+                    ? "أمان RBAC : صلاحيات ورتبة حساب المشرف العام مقفلة ومحمية ضد التعديل أو التخفيض."
+                    : "Sécurité RBAC : Les permissions et le rôle du compte Super Admin principal sont verrouillés par mesure de sécurité."}
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {[
                 {
                   role: "TOUR_LEADER" as TeamRole,
-                  title: "Tour Leader",
-                  desc: "Chef d'expédition & coordinateur",
+                  title: isAr ? "Tour Leader" : isEn ? "Tour Leader" : "Tour Leader",
+                  desc: isAr
+                    ? "رئيس الرحلة والتنسيق الميداني"
+                    : isEn
+                    ? "Expedition leader & coordinator"
+                    : "Chef d'expédition & coordinateur",
                   color: "border-cyan-500 text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/30",
+                  icon: User,
                 },
                 {
                   role: "OFFICIAL_GUIDE" as TeamRole,
-                  title: "Guide Officiel",
-                  desc: "Agrément Ministère du Tourisme",
+                  title: isAr ? "مرشد معتمد" : isEn ? "Official Guide" : "Guide Officiel",
+                  desc: isAr
+                    ? "مرشد سياحي معتمد من الوزارة"
+                    : isEn
+                    ? "Certified Tourism Guide"
+                    : "Agrément Ministère du Tourisme",
                   color: "border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30",
+                  icon: Award,
                 },
                 {
                   role: "DRIVER" as TeamRole,
-                  title: "Chauffeur Pro",
-                  desc: "Autocar & Minibus (Pointage ramassage)",
+                  title: isAr ? "سائق محترف" : isEn ? "Pro Driver" : "Chauffeur Pro",
+                  desc: isAr
+                    ? "حافلات وسيارات سياحية"
+                    : isEn
+                    ? "Coach & minibus passenger check-in"
+                    : "Autocar & Minibus (Pointage)",
                   color: "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30",
+                  icon: CreditCard,
                 },
                 {
                   role: "ORGANIZER" as TeamRole,
-                  title: "Organisateur",
-                  desc: "Gestion circuits & prestataires",
+                  title: isAr ? "منظم رحلات" : isEn ? "Organizer" : "Organisateur",
+                  desc: isAr
+                    ? "إدارة البرامج واللوجستيك"
+                    : isEn
+                    ? "Trips & logistics manager"
+                    : "Gestion circuits & prestataires",
                   color: "border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30",
+                  icon: Shield,
+                },
+                {
+                  role: "CONFIRMATION_AGENT" as TeamRole,
+                  title: isAr ? "تأكيد هاتفي" : isEn ? "Confirmation Agent" : "Agent Confirmation",
+                  desc: isAr
+                    ? "تأكيد الحجوزات والمكالمات ومتابعة الزبائن"
+                    : isEn
+                    ? "Phone calls & booking confirmation"
+                    : "Confirmation appels & réservations",
+                  color: "border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30",
+                  icon: PhoneCall,
+                },
+                {
+                  role: "MEDIA_BUYER" as TeamRole,
+                  title: isAr ? "مسؤول إعلانات" : isEn ? "Media Buyer" : "Media Buyer",
+                  desc: isAr
+                    ? "إدارة الحملات الممولة (Meta, TikTok, Ads)"
+                    : isEn
+                    ? "Ad acquisition (Meta, TikTok, Ads)"
+                    : "Acquisition publicitaire (Meta, Ads)",
+                  color: "border-violet-500 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30",
+                  icon: Megaphone,
+                },
+                {
+                  role: "PHOTOGRAPHER_VIDEOGRAPHER" as TeamRole,
+                  title: isAr ? "مصور وفيديوجرافر" : isEn ? "Photo / Video" : "Photographe / Vidéaste",
+                  desc: isAr
+                    ? "توثيق الرحلات الميدانية، ريلز وطائرات درون"
+                    : isEn
+                    ? "Field photo & video (Reels, Drone)"
+                    : "Reels, drone, shooting & souvenirs",
+                  color: "border-fuchsia-500 text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-50 dark:bg-fuchsia-950/30",
+                  icon: Video,
                 },
                 {
                   role: "SUPER_ADMIN" as TeamRole,
-                  title: "Super Admin",
-                  desc: "Accès total & finances",
+                  title: isAr ? "مشرف عام" : isEn ? "Super Admin" : "Super Admin",
+                  desc: isAr
+                    ? "إشراف كلي وصلاحيات مالية"
+                    : isEn
+                    ? "Total system access & finances"
+                    : "Accès total & finances",
                   color: "border-rose-500 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30",
+                  icon: Shield,
                 },
-              ].map((item) => {
-                const isSelected = formData.role === item.role;
-                return (
-                  <button
-                    key={item.role}
-                    type="button"
-                    onClick={() => handleRoleChange(item.role)}
-                    className={`p-3 rounded-2xl border text-start transition flex flex-col justify-between ${
-                      isSelected
-                        ? item.color + " shadow-sm ring-1 ring-offset-1 ring-cyan-500/50"
-                        : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 hover:border-slate-300 dark:hover:border-slate-700"
-                    }`}
-                  >
-                    <span className="text-xs font-black block">{item.title}</span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
-                      {item.desc}
-                    </span>
-                  </button>
-                );
-              })}
+              ]
+                .filter((item) => (isSuperAdmin || isTargetSuperAdmin ? true : item.role !== "SUPER_ADMIN"))
+                .map((item) => {
+                  const isSelected =
+                    formData.role === item.role ||
+                    (item.role === "DRIVER" && formData.role === ("PRO_DRIVER" as TeamRole));
+                  return (
+                    <button
+                      key={item.role}
+                      type="button"
+                      disabled={isTargetSuperAdmin}
+                      onClick={() => handleRoleChange(item.role)}
+                      className={`p-3 rounded-2xl border text-start transition flex flex-col justify-between ${
+                        isTargetSuperAdmin
+                          ? isSelected
+                            ? "opacity-90 border-rose-500 text-rose-700 bg-rose-50 dark:bg-rose-950/40 cursor-not-allowed"
+                            : "opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800"
+                          : isSelected
+                          ? item.color + " shadow-sm ring-1 ring-offset-1 ring-cyan-500/50"
+                          : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 hover:border-slate-300 dark:hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <item.icon className="w-4 h-4 opacity-80" />
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                      </div>
+                      <div>
+                        <span className="text-xs font-black block leading-snug">{item.title}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-tight">
+                          {item.desc}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
 
             {formData.role === "OFFICIAL_GUIDE" && (
@@ -530,8 +703,13 @@ export function TeamMemberModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                {isAr ? "حالة الحساب المباشرة" : "Statut d'activité"}
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>{isAr ? "حالة الحساب المباشرة" : "Statut d'activité"}</span>
+                {isTargetSuperAdmin && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    {isAr ? "(دائماً نشط)" : "(Toujours actif)"}
+                  </span>
+                )}
               </label>
               <div className="flex items-center gap-4 pt-1.5">
                 <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-emerald-600 dark:text-emerald-400">
@@ -544,12 +722,26 @@ export function TeamMemberModal({
                   />
                   <span>{isAr ? "نشط وفعال" : "Actif (Accès autorisé)"}</span>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-rose-600 dark:text-rose-400">
+                <label
+                  className={`flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400 ${
+                    isTargetSuperAdmin ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
+                  }`}
+                  title={
+                    isTargetSuperAdmin
+                      ? "Sécurité : Le compte Super Admin ne peut pas être suspendu"
+                      : undefined
+                  }
+                >
                   <input
                     type="radio"
                     name="isActive"
+                    disabled={isTargetSuperAdmin}
                     checked={formData.isActive === false}
-                    onChange={() => setFormData({ ...formData, isActive: false })}
+                    onChange={() => {
+                      if (!isTargetSuperAdmin) {
+                        setFormData({ ...formData, isActive: false });
+                      }
+                    }}
                     className="text-rose-600"
                   />
                   <span>{isAr ? "معلق ومحظور" : "Suspendu (Bloqué)"}</span>

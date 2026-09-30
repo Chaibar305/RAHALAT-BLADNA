@@ -10,14 +10,16 @@ import {
   LayoutDashboard, FileText, Ticket, Compass, 
   CreditCard, Settings, LogOut, ExternalLink, 
   ShieldCheck, ChevronRight, Menu, X, Bell, User, Users, Building2, QrCode, UserCheck,
-  Briefcase, UserPlus, Newspaper
+  Briefcase, UserPlus, Newspaper, TrendingUp
 } from "lucide-react";
 import { getAdminSidebarCountsAction } from "@/actions/sidebar.actions";
 import { ThemeToggle } from "./ThemeToggle";
+import { LanguageSwitcher } from "@/components/shared/LanguageSwitcher";
 
 export function AdminSidebar() {
   const locale = useLocale();
   const isAr = locale === "ar";
+  const isEn = locale === "en";
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
@@ -45,86 +47,122 @@ export function AdminSidebar() {
     role: "SUPER_ADMIN",
   };
 
-  const navItems = [
+  const userRole = ((user as any).role || "").toUpperCase();
+  const teamRole = ((user as any).teamRole || "").toUpperCase();
+  const perms = (user as any).permissions;
+
+  const isSuperAdmin = ["SUPER_ADMIN", "SUPERADMIN"].includes(userRole) || teamRole === "SUPER_ADMIN";
+
+  const hasPerm = (permKey: string, propKey?: string) => {
+    if (isSuperAdmin) return true;
+    if (propKey && perms && perms[propKey]) return true;
+    if (Array.isArray(perms) && perms.includes(permKey)) return true;
+    if (Array.isArray(perms?.list) && perms.list.includes(permKey)) return true;
+    return false;
+  };
+
+  const allNavItems = [
     {
-      label: isAr ? "لوحة القيادة" : "Tableau de Bord",
+      label: isAr ? "لوحة القيادة" : isEn ? "Dashboard" : "Tableau de Bord",
       href: `/${locale}/admin`,
       icon: LayoutDashboard,
       badge: null,
+      visible: true,
     },
     {
-      label: isAr ? "نقطة المسح والصعود (مباشر)" : "Scanner Embarquement",
+      label: isAr ? "نقطة المسح والصعود (مباشر)" : isEn ? "Boarding Scanner" : "Scanner Embarquement",
       href: `/${locale}/admin/scanner`,
       icon: QrCode,
       badge: "Live",
+      visible: isSuperAdmin || hasPerm("SCANNER_QR", "canScanTickets") || ["TOUR_LEADER", "OFFICIAL_GUIDE", "DRIVER", "PRO_DRIVER", "ORGANIZER"].includes(teamRole),
     },
     {
-      label: isAr ? "ورقة الطريق وبيان الركاب (TIST)" : "Manifestes TIST & Passagers",
+      label: isAr ? "ورقة الطريق وبيان الركاب (TIST)" : isEn ? "Passenger Manifests (TIST)" : "Manifestes TIST & Passagers",
       href: `/${locale}/admin/manifests`,
       icon: FileText,
-      badge: isAr ? "رسمي" : "Officiel",
+      badge: isAr ? "رسمي" : isEn ? "Official" : "Officiel",
+      visible: isSuperAdmin || hasPerm("VIEW_MANIFEST", "canViewManifest"),
     },
     {
-      label: isAr ? "الحجوزات والأقساط" : "Réservations & Acomptes",
+      label: isAr ? "الحجوزات والأقساط" : isEn ? "Bookings & Deposits" : "Réservations & Acomptes",
       href: `/${locale}/admin/bookings`,
       icon: Ticket,
       badge: counts.bookingsCount > 0 ? String(counts.bookingsCount) : null,
+      visible: isSuperAdmin || hasPerm("MANAGE_BOOKINGS", "canManageBookings") || teamRole === "CONFIRMATION_AGENT" || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "إدارة الرحلات والبرامج" : "Gestion des Circuits",
+      label: isAr ? "الإحصائيات والأداء" : isEn ? "Analytics & ROI" : "Analytics & Performances",
+      href: `/${locale}/admin/analytics`,
+      icon: TrendingUp,
+      badge: "Ads",
+      visible: isSuperAdmin || hasPerm("VIEW_ANALYTICS", "canViewAnalytics") || teamRole === "MEDIA_BUYER",
+    },
+    {
+      label: isAr ? "إدارة الرحلات والبرامج" : isEn ? "Tours & Circuits" : "Gestion des Circuits",
       href: `/${locale}/admin/trips`,
       icon: Compass,
       badge: null,
+      visible: isSuperAdmin || hasPerm("EDIT_TRIPS", "canEditTrips") || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "العملاء والمسافرون" : "Clients & Voyageurs",
+      label: isAr ? "العملاء والمسافرون" : isEn ? "Clients & Travelers" : "Clients & Voyageurs",
       href: `/${locale}/admin/clients`,
       icon: Users,
       badge: null,
+      visible: isSuperAdmin || hasPerm("MANAGE_BOOKINGS", "canManageBookings") || ["ORGANIZER", "CONFIRMATION_AGENT"].includes(teamRole),
     },
     {
-      label: isAr ? "الشركاء والموردون" : "Partenaires",
+      label: isAr ? "الشركاء والموردون" : isEn ? "Partners & Vendors" : "Partenaires",
       href: `/${locale}/admin/partners`,
       icon: Building2,
       badge: null,
+      visible: isSuperAdmin || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "المالية وفواتير الشركاء" : "Finances & Facturation",
+      label: isAr ? "المالية وفواتير الشركاء" : isEn ? "Finances & Invoices" : "Finances & Facturation",
       href: `/${locale}/admin/finances`,
       icon: CreditCard,
       badge: null,
+      visible: isSuperAdmin || hasPerm("MANAGE_FINANCES", "canManageFinances") || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "فريق العمل والأدوار" : "Équipe & Rôles",
+      label: isAr ? "فريق العمل والأدوار" : isEn ? "Team & Roles" : "Équipe & Rôles",
       href: `/${locale}/admin/team`,
       icon: UserCheck,
       badge: "RBAC",
+      visible: isSuperAdmin || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "عروض التوظيف والفرص" : "Recrutement : Offres",
+      label: isAr ? "عروض التوظيف والفرص" : isEn ? "Careers: Job Offers" : "Recrutement : Offres",
       href: `/${locale}/admin/recrutement/offres`,
       icon: Briefcase,
       badge: null,
+      visible: isSuperAdmin || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "طلبات الترشح والسير الذاتية" : "Candidatures & CVs",
+      label: isAr ? "طلبات الترشح والسير الذاتية" : isEn ? "Applications & CVs" : "Candidatures & CVs",
       href: `/${locale}/admin/recrutement/candidatures`,
       icon: UserPlus,
       badge: counts.newApplicationsCount > 0 ? String(counts.newApplicationsCount) : null,
+      visible: isSuperAdmin || teamRole === "ORGANIZER",
     },
     {
-      label: isAr ? "المقالات والمدونة" : "Blog & Articles",
+      label: isAr ? "المقالات والمدونة" : isEn ? "Blog & Articles" : "Blog & Articles",
       href: `/${locale}/admin/blog`,
       icon: Newspaper,
       badge: null,
+      visible: isSuperAdmin || hasPerm("MANAGE_BLOG", "canManageBlog") || ["MEDIA_BUYER", "PHOTOGRAPHER_VIDEOGRAPHER"].includes(teamRole),
     },
     {
-      label: isAr ? "إعدادات المنظومة والمستخدمين" : "Paramètres Généraux",
+      label: isAr ? "إعدادات المنظومة والمستخدمين" : isEn ? "General Settings" : "Paramètres Généraux",
       href: `/${locale}/admin/settings`,
       icon: Settings,
       badge: null,
+      visible: isSuperAdmin,
     },
   ];
+
+  const navItems = allNavItems.filter((i) => i.visible);
 
   return (
     <>
@@ -146,19 +184,20 @@ export function AdminSidebar() {
               height={26}
               className="object-contain"
             />
-            <span className="font-black text-xs text-tp-cyan-hover dark:text-tp-cyan tracking-wider">
-              ADMINISTRATION
+            <span className="font-black text-xs text-cyan-600 dark:text-cyan-400 tracking-wider">
+              {isAr ? "إدارة المنصة" : isEn ? "ADMIN" : "ADMINISTRATION"}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          <LanguageSwitcher />
           <ThemeToggle variant="compact" />
           <Link
             href={`/${locale}`}
-            className="text-xs text-slate-700 dark:text-slate-300 hover:text-tp-cyan dark:hover:text-white flex items-center gap-1 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 transition"
+            className="text-xs text-slate-700 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-white flex items-center gap-1 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 transition"
           >
-            <span>{isAr ? "الموقع" : "Site Public"}</span>
+            <span>{isAr ? "الموقع" : isEn ? "Site" : "Site Public"}</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -184,7 +223,7 @@ export function AdminSidebar() {
             href={`/${locale}/admin`}
             className="flex items-center gap-3 group transition-transform duration-150 hover:scale-[1.01]"
           >
-            <div className="relative w-11 h-11 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 p-1 flex items-center justify-center shadow-sm dark:shadow-lg dark:shadow-black/20 shrink-0 group-hover:border-tp-cyan/50 transition-colors">
+            <div className="relative w-11 h-11 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 p-1 flex items-center justify-center shadow-sm dark:shadow-lg dark:shadow-black/20 shrink-0 group-hover:border-cyan-500/50 transition-colors">
               <Image
                 src="/images/logo/logo-emblem.png"
                 alt="Rahalat Bladna"
@@ -195,13 +234,13 @@ export function AdminSidebar() {
               />
             </div>
             <div>
-              <h2 className="font-black text-slate-900 dark:text-white text-sm leading-tight group-hover:text-tp-cyan transition-colors">
+              <h2 className="font-black text-slate-900 dark:text-white text-sm leading-tight group-hover:text-cyan-500 transition-colors">
                 {isAr ? "إدارة رحلات بلادنا" : "Rahalat Bladna"}
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-tp-cyan-hover dark:text-tp-cyan font-bold uppercase tracking-wider">
-                  Espace Direction
+                <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold uppercase tracking-wider">
+                  {isAr ? "فضاء الإدارة العامة" : isEn ? "Executive Portal" : "Espace Direction"}
                 </span>
               </div>
             </div>
@@ -267,27 +306,30 @@ export function AdminSidebar() {
         </nav>
 
         {/* Footer Actions */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40 space-y-2 transition-colors">
-          {/* Theme Switcher Toggle */}
-          <ThemeToggle />
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40 space-y-2.5 transition-colors">
+          {/* Language Switcher & Theme Toggle */}
+          <div className="flex items-center justify-between gap-2">
+            <LanguageSwitcher />
+            <ThemeToggle variant="compact" />
+          </div>
 
           <Link
             href={`/${locale}`}
-            className="w-full px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between border border-slate-200/80 dark:border-transparent"
+            className="w-full px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between border border-slate-200/80 dark:border-slate-800"
           >
             <span className="flex items-center gap-2">
-              <ExternalLink className="w-3.5 h-3.5 text-tp-cyan" />
-              {isAr ? "الرجوع إلى الموقع العام" : "Voir le Site Public"}
+              <ExternalLink className="w-3.5 h-3.5 text-cyan-500" />
+              {isAr ? "الرجوع إلى الموقع العام" : isEn ? "View Public Site" : "Voir le Site Public"}
             </span>
             <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180 text-slate-400 dark:text-slate-500" />
           </Link>
 
           <button
             onClick={() => signOut({ callbackUrl: `/${locale}` })}
-            className="w-full px-3.5 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40 transition flex items-center gap-2"
+            className="w-full px-3.5 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40 transition flex items-center gap-2 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>{isAr ? "تسجيل الخروج الآمن" : "Déconnexion Sécurisée"}</span>
+            <span>{isAr ? "تسجيل الخروج الآمن" : isEn ? "Sign Out" : "Déconnexion Sécurisée"}</span>
           </button>
         </div>
       </aside>

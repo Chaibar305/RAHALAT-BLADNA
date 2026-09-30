@@ -8,7 +8,8 @@ export default async function AdminTeamPage({
 }: {
   params: { locale: string };
 }) {
-  await requireTeamManagementAccess(locale);
+  const permissions = await requireTeamManagementAccess(locale);
+  const isSuperAdmin = Boolean(permissions?.isSuperAdmin);
 
   const [teamRes, usersRes] = await Promise.all([
     getTeamMembersAction(),
@@ -33,6 +34,7 @@ export default async function AdminTeamPage({
       initialMembers={members}
       stats={stats}
       availableUsers={availableUsers}
+      isSuperAdmin={isSuperAdmin}
     />
   );
 }

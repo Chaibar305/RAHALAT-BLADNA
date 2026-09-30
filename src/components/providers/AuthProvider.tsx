@@ -14,8 +14,24 @@ export interface AuthContextType {
     phone?: string | null;
     cinOrPassport?: string | null;
     isProfileComplete?: boolean;
+    isStaff?: boolean;
+    teamRole?: string | null;
+    permissions?: {
+      canScanTickets: boolean;
+      canViewManifest: boolean;
+      canCollectCash: boolean;
+      canEditTrips: boolean;
+    } | null;
   } | null;
   role: string;
+  isStaff: boolean;
+  teamRole: string | null;
+  permissions: {
+    canScanTickets: boolean;
+    canViewManifest: boolean;
+    canCollectCash: boolean;
+    canEditTrips: boolean;
+  } | null;
   isAdmin: boolean;
   isSuperAdmin: boolean;
   isClient: boolean;
@@ -28,6 +44,9 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: "CLIENT",
+  isStaff: false,
+  teamRole: null,
+  permissions: null,
   isAdmin: false,
   isSuperAdmin: false,
   isClient: true,
@@ -45,9 +64,13 @@ function AuthContextConsumer({ children }: { children: React.ReactNode }) {
     const isAuthenticated = status === "authenticated" && !!session?.user;
 
     const rawRole = ((session?.user as any)?.role || "CLIENT").toUpperCase();
-    const isSuperAdmin = rawRole === "SUPER_ADMIN" || rawRole === "SUPERADMIN";
-    const isAdmin = isSuperAdmin || ["ADMIN", "AGENCY_ADMIN"].includes(rawRole);
-    const isClient = !isAdmin;
+    const isStaff = !!(session?.user as any)?.isStaff;
+    const teamRole = ((session?.user as any)?.teamRole as string) || null;
+    const permissions = (session?.user as any)?.permissions || null;
+
+    const isSuperAdmin = rawRole === "SUPER_ADMIN" || rawRole === "SUPERADMIN" || teamRole === "SUPER_ADMIN";
+    const isAdmin = isSuperAdmin || ["ADMIN", "AGENCY_ADMIN", "ORGANIZER"].includes(rawRole) || isStaff;
+    const isClient = !isAdmin && !isStaff;
 
     const user = session?.user
       ? {
@@ -60,12 +83,18 @@ function AuthContextConsumer({ children }: { children: React.ReactNode }) {
           phone: (session.user as any).phone || null,
           cinOrPassport: (session.user as any).cinOrPassport || null,
           isProfileComplete: (session.user as any).isProfileComplete ?? false,
+          isStaff,
+          teamRole,
+          permissions,
         }
       : null;
 
     return {
       user,
       role: rawRole,
+      isStaff,
+      teamRole,
+      permissions,
       isAdmin,
       isSuperAdmin,
       isClient,

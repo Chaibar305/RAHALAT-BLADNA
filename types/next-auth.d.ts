@@ -1,7 +1,20 @@
 import NextAuth, { DefaultSession, DefaultUser } from "next-auth";
 import { JWT as DefaultJWT } from "next-auth/jwt";
 
-export type AppUserRole = "SUPER_ADMIN" | "SUPERADMIN" | "ADMIN" | "AGENCY_ADMIN" | "AGENCY_STAFF" | "TOUR_LEADER" | "CLIENT";
+export type AppUserRole = "SUPER_ADMIN" | "SUPERADMIN" | "ADMIN" | "AGENCY_ADMIN" | "AGENCY_STAFF" | "TOUR_LEADER" | "STAFF" | "CLIENT";
+
+export interface TeamMemberPermissions {
+  canScanTickets: boolean;
+  canViewManifest: boolean;
+  canCollectCash: boolean;
+  canEditTrips: boolean;
+  canManageBookings?: boolean;
+  canViewAnalytics?: boolean;
+  canManageBlog?: boolean;
+  canManageFinances?: boolean;
+  list?: string[];
+  includes?: (perm: string) => boolean;
+}
 
 declare module "next-auth" {
   interface User extends DefaultUser {
@@ -11,6 +24,10 @@ declare module "next-auth" {
     phone?: string | null;
     cinOrPassport?: string | null;
     isProfileComplete?: boolean;
+    isStaff?: boolean;
+    teamRole?: string | null;
+    teamMemberId?: string | null;
+    permissions?: TeamMemberPermissions | null;
   }
 
   interface Session {
@@ -21,6 +38,10 @@ declare module "next-auth" {
       phone?: string | null;
       cinOrPassport?: string | null;
       isProfileComplete?: boolean;
+      isStaff?: boolean;
+      teamRole?: string | null;
+      teamMemberId?: string | null;
+      permissions?: TeamMemberPermissions | null;
     } & DefaultSession["user"];
   }
 }
@@ -32,5 +53,9 @@ declare module "next-auth/jwt" {
     phone?: string | null;
     cinOrPassport?: string | null;
     isProfileComplete?: boolean;
+    isStaff?: boolean;
+    teamRole?: string | null;
+    teamMemberId?: string | null;
+    permissions?: TeamMemberPermissions | null;
   }
 }

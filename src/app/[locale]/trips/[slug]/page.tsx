@@ -37,12 +37,17 @@ export async function generateMetadata({
   }
 
   const isAr = params.locale === "ar";
+  const isEn = params.locale === "en";
   const title = isAr
     ? `${trip.titleAr || trip.titleFr} | رحلات بلادنا`
+    : isEn
+    ? `${trip.titleEn || trip.titleFr} - Morocco Guided Tour | Rahalat Bladna`
     : `${trip.titleFr} - Voyage Organisé au Maroc | Rahalat Bladna`;
 
   const rawDescription = isAr
     ? (trip.overviewAr || trip.shortDescriptionAr || trip.shortDescriptionFr || "")
+    : isEn
+    ? ((trip as any).overviewEn || (trip as any).shortDescriptionEn || trip.shortDescriptionFr || "")
     : (trip.overviewFr || trip.shortDescriptionFr || trip.shortDescriptionAr || "");
 
   const description = rawDescription.trim().slice(0, 160);
@@ -58,6 +63,7 @@ export async function generateMetadata({
       languages: {
         "fr-MA": `${baseUrl}/fr/trips/${trip.slug}`,
         "ar-MA": `${baseUrl}/ar/trips/${trip.slug}`,
+        "en-US": `${baseUrl}/en/trips/${trip.slug}`,
       },
     },
     openGraph: {
@@ -791,25 +797,28 @@ export default async function TripDetailPage({
     },
   ];
 
+  const isEn = locale === "en";
   const dbTripAny = dbTrip as any;
 
   const dbProgramSteps: ProgramStep[] = dbTrip?.itineraryDays && dbTrip.itineraryDays.length > 0
     ? dbTrip.itineraryDays.map((d: any, i: number) => {
-        const timing = d.timeSlot || (isAr ? "طيلة اليوم" : "09h00 - 18h00");
+        const timing = d.timeSlot || (isAr ? "طيلة اليوم" : isEn ? "Full day" : "09h00 - 18h00");
         return {
           id: d.id,
           siteId: `day-site-${d.id}`,
           dayLabel: isAr
             ? `اليوم ${d.dayNumber}${d.locationName || d.location ? ` — ${d.locationName || d.location}` : ""}`
+            : isEn
+            ? `Day ${d.dayNumber}${d.locationName || d.location ? ` — ${d.locationName || d.location}` : ""}`
             : `Jour ${d.dayNumber}${d.locationName || d.location ? ` — ${d.locationName || d.location}` : ""}`,
           dayLabelAr: `اليوم ${d.dayNumber}${d.locationName || d.location ? ` — ${d.locationName || d.location}` : ""}`,
-          title: isAr && d.titleAr ? d.titleAr : d.titleFr,
+          title: isAr && d.titleAr ? d.titleAr : isEn && d.titleEn ? d.titleEn : (d.titleFr || d.titleAr),
           titleAr: d.titleAr || d.titleFr,
           timing: timing,
           timingAr: timing.replace(/h/g, ":"),
-          desc: isAr && d.descriptionAr ? d.descriptionAr : d.descriptionFr,
+          desc: isAr && d.descriptionAr ? d.descriptionAr : isEn && d.descriptionEn ? d.descriptionEn : (d.descriptionFr || d.descriptionAr),
           descAr: d.descriptionAr || d.descriptionFr,
-          highlights: d.activityTags && d.activityTags.length > 0 ? d.activityTags : [d.location, "Visite guidée"],
+          highlights: d.activityTags && d.activityTags.length > 0 ? d.activityTags : [d.location, isEn ? "Guided exploration" : "Visite guidée"],
           highlightsAr: d.activityTags && d.activityTags.length > 0 ? d.activityTags : [d.location, "جولة مؤطرة"],
           iconType: (i % 2 === 0 ? "dunes" : "bivouac") as any,
         };
@@ -819,14 +828,14 @@ export default async function TripDetailPage({
   const dbGalleryItems: GalleryItem[] = dbTrip?.itineraryDays && dbTrip.itineraryDays.length > 0
     ? dbTrip.itineraryDays.map((d: any) => ({
         id: `day-site-${d.id}`,
-        title: d.titleFr,
+        title: isAr && d.titleAr ? d.titleAr : isEn && d.titleEn ? d.titleEn : d.titleFr,
         titleAr: d.titleAr || d.titleFr,
         location: d.locationName || d.location,
         locationAr: d.locationName || d.location,
-        description: d.descriptionFr,
+        description: isAr && d.descriptionAr ? d.descriptionAr : isEn && d.descriptionEn ? d.descriptionEn : d.descriptionFr,
         descriptionAr: d.descriptionAr || d.descriptionFr,
         imageUrl: d.featuredImage || dbTrip.coverImageUrl || "/images/merzouga/cover-merzouga.jpg",
-        tag: `Étape Jour ${d.dayNumber}`,
+        tag: isAr ? `برنامج اليوم ${d.dayNumber}` : isEn ? `Day ${d.dayNumber} Stage` : `Étape Jour ${d.dayNumber}`,
         tagAr: `برنامج اليوم ${d.dayNumber}`,
       }))
     : [];
@@ -839,19 +848,25 @@ export default async function TripDetailPage({
             ? dbGalleryItems
             : (isAsfalou ? asfalouTouristSites : (isChefchaouen ? chefchaouenTouristSites : merzougaTouristSites))));
 
-  const programSteps = isJbelMoussa
-    ? jbelMoussaProgramSteps
-    : (isMoyenAtlas
-        ? moyenAtlasProgramSteps
-        : (dbProgramSteps.length > 0
-            ? dbProgramSteps
-            : (isAsfalou ? asfalouProgramSteps : (isChefchaouen ? chefchaouenProgramSteps : merzougaProgramSteps))));
+  const programSteps = (isEn && dbProgramSteps.length > 0)
+    ? dbProgramSteps
+    : (isJbelMoussa
+        ? jbelMoussaProgramSteps
+        : (isMoyenAtlas
+            ? moyenAtlasProgramSteps
+            : (dbProgramSteps.length > 0
+                ? dbProgramSteps
+                : (isAsfalou ? asfalouProgramSteps : (isChefchaouen ? chefchaouenProgramSteps : merzougaProgramSteps)))));
 
   // Dynamic trip object matching DTO interfaces
   const trip = {
     id: dbTrip?.id || (isAsfalou ? "barrage-asfalou-ghadir-hamma-kayak" : (isChefchaouen ? "trip-chefchaouen-akchour-2j" : "trip-merzouga-todra-3j")),
-    title: isAr && dbTrip?.titleAr ? dbTrip.titleAr : (dbTrip?.titleFr || (isAsfalou ? "☀️ BARRAGE ASFALOU · GHADIR HAMMA · SESSION KAYAK ☀️" : (isChefchaouen ? "Escapade Bleue : Chefchaouen & Cascades d'Akchour (2J/1N)" : "Magie du Désert : Dunes de Merzouga & Gorges du Todra (3J/2N)"))),
-    duration: `${dbTrip?.durationDays || (isChefchaouen ? 2 : 3)} ${isAr ? "أيام" : "Jours"} / ${dbTrip?.durationNights || (isChefchaouen ? 1 : 2)} ${isAr ? "ليالي" : "Nuits"}`,
+    title: isAr && dbTrip?.titleAr 
+      ? dbTrip.titleAr 
+      : isEn && dbTrip?.titleEn 
+      ? dbTrip.titleEn 
+      : (dbTrip?.titleFr || (isAsfalou ? "☀️ BARRAGE ASFALOU · GHADIR HAMMA · SESSION KAYAK ☀️" : (isChefchaouen ? "Escapade Bleue : Chefchaouen & Cascades d'Akchour (2J/1N)" : "Magie du Désert : Dunes de Merzouga & Gorges du Todra (3J/2N)"))),
+    duration: `${dbTrip?.durationDays || (isChefchaouen ? 2 : 3)} ${isAr ? "أيام" : isEn ? "Days" : "Jours"} / ${dbTrip?.durationNights || (isChefchaouen ? 1 : 2)} ${isAr ? "ليالي" : isEn ? "Nights" : "Nuits"}`,
     region: dbTrip?.destinationRegion || (isAsfalou ? "Rif / Taher Souk (Marnissa - Barrage Asfalou)" : (isChefchaouen ? "Tanger-Tétouan-Al Hoceïma (Chefchaouen & Akchour)" : "Drâa-Tafilalet (Merzouga & Tinghir)")),
     basePrice: Number(dbTrip?.basePrice || (isAsfalou ? 1300 : (isChefchaouen ? 890 : 1450))),
     depositPerPerson: Number(dbTrip?.depositPerPerson || (isAsfalou ? 400 : (isChefchaouen ? 300 : 500))),
@@ -862,6 +877,10 @@ export default async function TripDetailPage({
         if (dbTripAny?.includedServicesAr && dbTripAny.includedServicesAr.length > 0) return dbTripAny.includedServicesAr;
         if (dbTripAny?.includedServices && dbTripAny.includedServices.length > 0) return dbTripAny.includedServices;
         if (dbTripAny?.includedServicesFr && dbTripAny.includedServicesFr.length > 0) return dbTripAny.includedServicesFr;
+      } else if (isEn) {
+        if (dbTripAny?.includedServicesEn && dbTripAny.includedServicesEn.length > 0) return dbTripAny.includedServicesEn;
+        if (dbTripAny?.includedServicesFr && dbTripAny.includedServicesFr.length > 0) return dbTripAny.includedServicesFr;
+        if (dbTripAny?.includedServices && dbTripAny.includedServices.length > 0) return dbTripAny.includedServices;
       } else {
         if (dbTripAny?.includedServices && dbTripAny.includedServices.length > 0) return dbTripAny.includedServices;
         if (dbTripAny?.includedServicesFr && dbTripAny.includedServicesFr.length > 0) return dbTripAny.includedServicesFr;
@@ -869,6 +888,8 @@ export default async function TripDetailPage({
       }
       return isAr
         ? ["نقل سياحي مكيف ومريح مطابق لمعايير TIST", "ليلة مبيت بفندق 4 نجوم بنصف إقامة", "مبيت بمخيم مجهز", "أنشطة التجديف والسباحة المؤطرة", "أمسية حول النار", "مرشد ومرافق سياحي معتمد"]
+        : isEn
+        ? ["Comfortable air-conditioned tourist transport (TIST)", "Selected hotel / luxury desert bivouac", "Half-board (Dinners & hearty breakfasts)", "Certified mountain and desert tour leader", "Travel assistance insurance included"]
         : ["Transport touristique climatisé grand confort (TIST)", "Hébergement en tentes équipées", "Pension complète", "Session Kayak et gilets de sauvetage", "Soirée feu de camp sous les étoiles", "Guides locaux accompagnateurs"];
     })(),
     excluded: (() => {
@@ -876,6 +897,10 @@ export default async function TripDetailPage({
         if (dbTripAny?.excludedServicesAr && dbTripAny.excludedServicesAr.length > 0) return dbTripAny.excludedServicesAr;
         if (dbTripAny?.excludedServices && dbTripAny.excludedServices.length > 0) return dbTripAny.excludedServices;
         if (dbTripAny?.excludedServicesFr && dbTripAny.excludedServicesFr.length > 0) return dbTripAny.excludedServicesFr;
+      } else if (isEn) {
+        if (dbTripAny?.excludedServicesEn && dbTripAny.excludedServicesEn.length > 0) return dbTripAny.excludedServicesEn;
+        if (dbTripAny?.excludedServicesFr && dbTripAny.excludedServicesFr.length > 0) return dbTripAny.excludedServicesFr;
+        if (dbTripAny?.excludedServices && dbTripAny.excludedServices.length > 0) return dbTripAny.excludedServices;
       } else {
         if (dbTripAny?.excludedServices && dbTripAny.excludedServices.length > 0) return dbTripAny.excludedServices;
         if (dbTripAny?.excludedServicesFr && dbTripAny.excludedServicesFr.length > 0) return dbTripAny.excludedServicesFr;
@@ -883,11 +908,17 @@ export default async function TripDetailPage({
       }
       return isAr
         ? ["وجبات الغداء الحرة أثناء محطات التوقف", "المصاريف الشخصية والإكراميات", "الأنشطة الإضافية الاختيارية"]
+        : isEn
+        ? ["Free lunches during travel pauses", "Personal beverages and souvenirs", "Optional quad/buggy sessions", "Driver & guide tips"]
         : ["Déjeuners libres lors des escales", "Dépenses personnelles et pourboires", "Activités optionnelles"];
     })(),
     checklist: (() => {
       if (isAr) {
         if (dbTripAny?.checklistItemsAr && dbTripAny.checklistItemsAr.length > 0) return dbTripAny.checklistItemsAr;
+        if (dbTripAny?.checklistItemsFr && dbTripAny.checklistItemsFr.length > 0) return dbTripAny.checklistItemsFr;
+        if (dbTripAny?.whatToBring && dbTripAny.whatToBring.length > 0) return dbTripAny.whatToBring;
+      } else if (isEn) {
+        if (dbTripAny?.checklistItemsEn && dbTripAny.checklistItemsEn.length > 0) return dbTripAny.checklistItemsEn;
         if (dbTripAny?.checklistItemsFr && dbTripAny.checklistItemsFr.length > 0) return dbTripAny.checklistItemsFr;
         if (dbTripAny?.whatToBring && dbTripAny.whatToBring.length > 0) return dbTripAny.whatToBring;
       } else {
@@ -897,6 +928,8 @@ export default async function TripDetailPage({
       }
       return isAr
         ? ["بطاقة التعريف الوطنية (CIN) أو جواز السفر الأصلي إلزامي", "أحذية مائية مغلقة للمشي في الماء", "ملابس سباحة، منشفة وقبعة", "واقي شمسي ونظارات شمسية"]
+        : isEn
+        ? ["Original ID card or Passport (mandatory)", "Comfortable walking shoes and sneakers", "Warm outerwear for evenings", "Sunscreen SPF 50 & polarized sunglasses"]
         : ["Carte d'Identité Nationale (CIN) originale obligatoire", "Chaussures aquatiques fermées pour l'eau", "Maillots de bain, serviette et casquette", "Crème solaire et lunettes de soleil"];
     })(),
     pickupPoints: dbTrip?.pickupPoints && dbTrip.pickupPoints.length > 0
@@ -1020,11 +1053,11 @@ export default async function TripDetailPage({
           {/* Breadcrumbs */}
           <div className="flex items-center gap-2 text-xs font-bold text-tp-ivory/70">
             <Link href={`/${locale}`} className="hover:text-white transition">
-              {isAr ? "الرئيسية" : "Accueil"}
+              {isAr ? "الرئيسية" : isEn ? "Home" : "Accueil"}
             </Link>
             <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
             <Link href={`/${locale}/trips`} className="hover:text-white transition">
-              {isAr ? "برامجنا" : "Nos Circuits"}
+              {isAr ? "برامجنا" : isEn ? "Our Tours" : "Nos Circuits"}
             </Link>
             <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
             <span className="text-tp-cyan-soft truncate max-w-xs">{trip.title}</span>
@@ -1032,7 +1065,7 @@ export default async function TripDetailPage({
 
           <div className="flex flex-wrap items-center gap-3">
             <span className="px-3 py-1 rounded-pill bg-tp-ok-bg text-tp-ok-fg text-xs font-extrabold shadow-sm">
-              {isAr ? "انطلاق مضمون" : "Départ Garanti"}
+              {isAr ? "انطلاق مضمون" : isEn ? "Guaranteed Departure" : "Départ Garanti"}
             </span>
             <span className="px-3 py-1 rounded-pill bg-white/15 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-tp-cyan" />
@@ -1050,18 +1083,18 @@ export default async function TripDetailPage({
 
           <div className="flex flex-wrap items-center gap-6 pt-2">
             <div>
-              <span className="text-xs text-tp-ivory/80 block">{isAr ? "ابتداءً من" : "À partir de"}</span>
+              <span className="text-xs text-tp-ivory/80 block">{isAr ? "ابتداءً من" : isEn ? "From" : "À partir de"}</span>
               <div className="text-2xl sm:text-3xl font-black text-tp-gold">
-                {formatMAD(trip.basePrice)}
-                <span className="text-xs font-medium text-tp-ivory/70 ml-1 font-sans">{isAr ? "/ شخص" : "/ pers"}</span>
+                {formatMAD(trip.basePrice, locale)}
+                <span className="text-xs font-medium text-tp-ivory/70 ml-1 font-sans">{isAr ? "/ شخص" : isEn ? "/ pers" : "/ pers"}</span>
               </div>
             </div>
             <div className="h-8 w-px bg-white/20 hidden sm:block" />
             <div>
-              <span className="text-xs text-tp-ivory/80 block">{isAr ? "الدفعة الأولى (التسبيق)" : "Acompte requis"}</span>
+              <span className="text-xs text-tp-ivory/80 block">{isAr ? "الدفعة الأولى (التسبيق)" : isEn ? "Deposit required" : "Acompte requis"}</span>
               <div className="text-lg font-bold text-white">
-                {formatMAD(trip.depositPerPerson)}
-                <span className="text-xs font-normal text-tp-ivory/70 ml-1 font-sans">{isAr ? "/ شخص" : "/ pers"}</span>
+                {formatMAD(trip.depositPerPerson, locale)}
+                <span className="text-xs font-normal text-tp-ivory/70 ml-1 font-sans">{isAr ? "/ شخص" : isEn ? "/ pers" : "/ pers"}</span>
               </div>
             </div>
           </div>

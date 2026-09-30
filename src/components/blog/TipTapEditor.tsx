@@ -35,10 +35,14 @@ import {
   RemoveFormatting,
   Palette,
   ChevronDown,
-  X,
-  Check,
   Code,
   Sparkles,
+  UploadCloud,
+  Loader2,
+  AlertCircle,
+  Trash2,
+  Check,
+  X,
 } from 'lucide-react';
 
 interface TipTapEditorProps {
@@ -80,6 +84,14 @@ export function TipTapEditor({
   const [imageAlt, setImageAlt] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+
+  // R2 Upload State pour l'image
+  const [imageTab, setImageTab] = useState<'upload' | 'url'>('upload');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
 
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
@@ -153,6 +165,53 @@ export function TipTapEditor({
     );
   }
 
+  // Téléversement direct vers Cloudflare R2
+  const handleUploadImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Veuillez sélectionner un fichier image valide (JPG, PNG, WebP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Le fichier dépasse la taille maximale autorisée de 5 Mo.');
+      return;
+    }
+
+    setUploadError(null);
+    setIsUploadingImage(true);
+    setUploadProgress(20);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'blog');
+
+      setUploadProgress(65);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      setUploadProgress(100);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Échec du téléversement sur Cloudflare R2.');
+      }
+
+      setImageUrl(data.url);
+      if (!imageAlt.trim()) {
+        const cleanAlt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setImageAlt(cleanAlt);
+      }
+    } catch (err: any) {
+      console.error('R2 TipTap Upload Error:', err);
+      setUploadError(err.message || 'Impossible de téléverser l’image.');
+    } finally {
+      setIsUploadingImage(false);
+      setUploadProgress(0);
+    }
+  };
+
   // Insertion d'image
   const handleInsertImage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +219,7 @@ export function TipTapEditor({
       editor.chain().focus().setImage({ src: imageUrl.trim(), alt: imageAlt.trim() || 'Photo article' }).run();
       setImageUrl('');
       setImageAlt('');
+      setUploadError(null);
       setShowImageModal(false);
     }
   };
@@ -548,81 +608,194 @@ export function TipTapEditor({
       {/* MODAL INSERTION D'IMAGE                                  */}
       {/* ======================================================== */}
       {showImageModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
           <form
             onSubmit={handleInsertImage}
-            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl p-6 shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-3xl p-6 shadow-2xl space-y-5"
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                  <ImageIcon className="w-4 h-4" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5" />
                 </div>
-                <h4 className="text-sm font-black text-slate-900 dark:text-white">Insérer une Image</h4>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Insérer une Image</h4>
+                  <p className="text-[11px] text-slate-400">Stockage haute performance Cloudflare R2</p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowImageModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"
+                onClick={() => {
+                  setShowImageModal(false);
+                  setUploadError(null);
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white transition"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            {/* Onglets : Téléversement direct R2 vs URL externe */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 border border-slate-200/80 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setImageTab('upload')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  imageTab === 'upload'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Téléverser depuis le PC</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setImageTab('url')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  imageTab === 'url'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <LinkIcon className="w-3.5 h-3.5 text-slate-400" />
+                <span>Lien URL externe</span>
+              </button>
+            </div>
+
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {imageTab === 'upload' ? (
+              <div className="space-y-3">
+                <input
+                  ref={imageFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleUploadImageFile(e.target.files[0]);
+                    }
+                  }}
+                />
+
+                {imageUrl ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2">
+                    <img
+                      src={imageUrl}
+                      alt="Aperçu téléversé"
+                      className="max-h-48 w-full object-cover rounded-xl"
+                    />
+                    <div className="flex items-center justify-between pt-2 px-1">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Image stockée sur R2
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => imageFileInputRef.current?.click()}
+                        className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline"
+                      >
+                        Changer d’image
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImage(true);
+                    }}
+                    onDragLeave={() => setIsDraggingImage(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImage(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleUploadImageFile(e.dataTransfer.files[0]);
+                      }
+                    }}
+                    onClick={() => imageFileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 ${
+                      isDraggingImage
+                        ? 'border-cyan-500 bg-cyan-500/10 scale-98'
+                        : 'border-slate-300 dark:border-white/15 hover:border-cyan-500 hover:bg-slate-50 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    {isUploadingImage ? (
+                      <div className="space-y-2 py-4 flex flex-col items-center">
+                        <Loader2 className="w-7 h-7 text-cyan-500 animate-spin" />
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Téléversement vers Cloudflare R2 ({uploadProgress}%)...
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center">
+                          <UploadCloud className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-800 dark:text-white">
+                            Glissez-déposez votre image ici, ou <span className="text-cyan-500 underline">parcourez vos fichiers</span>
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            PNG, JPG ou WebP jusqu’à 5 Mo • Optimisation Cloudflare
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
               <div>
                 <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
                   URL de l’image *
                 </label>
                 <input
                   type="url"
-                  required
-                  placeholder="https://images.unsplash.com/... ou URL Cloudflare"
+                  placeholder="https://images.unsplash.com/... ou URL directe"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
+            )}
 
-              <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
-                  Légende / Texte alternatif (Alt)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex : Paysage des dunes de Merzouga au coucher du soleil"
-                  value={imageAlt}
-                  onChange={(e) => setImageAlt(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              {imageUrl && (
-                <div className="p-2 border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden bg-slate-50 dark:bg-white/5">
-                  <p className="text-[10px] text-slate-400 font-bold mb-1">Aperçu :</p>
-                  <img
-                    src={imageUrl}
-                    alt="Aperçu"
-                    className="max-h-36 rounded-lg mx-auto object-cover"
-                    onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                  />
-                </div>
-              )}
+            <div>
+              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                Légende / Texte alternatif (Alt)
+              </label>
+              <input
+                type="text"
+                placeholder="Ex : Vue panoramique des cascades d’Akchour"
+                value={imageAlt}
+                onChange={(e) => setImageAlt(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500"
+              />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setShowImageModal(false)}
+                onClick={() => {
+                  setShowImageModal(false);
+                  setUploadError(null);
+                }}
                 className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-md shadow-cyan-500/25 transition active:scale-95"
+                disabled={!imageUrl.trim() || isUploadingImage}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 text-xs font-black shadow-md shadow-cyan-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                Insérer l’image
+                Insérer dans l’article
               </button>
             </div>
           </form>
