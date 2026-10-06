@@ -5,7 +5,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { CreateBookingSchema, CreateBookingInput } from "@/lib/validations/booking.schema";
-import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod } from "@prisma/client";
+// Types Prisma (BookingStatus, CallStatus, PaymentStatus, etc.)
+import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, PaymentMethod, CallStatus } from "@prisma/client";
+import { normalizeTrafficSource } from "@/lib/attribution";
+import { syncBookingToSheetsTask } from "@/actions/settings.actions";
 import { updateBookingAction as updateBookingActionImpl } from "./admin-bookings";
 import { sendMetaCapiEvent } from "@/lib/meta-capi";
 import { getInvoiceData } from "@/actions/invoice.actions";
@@ -36,7 +39,12 @@ export async function createBookingAction(input: CreateBookingInput) {
     const data = parsed.data;
 
     // 2. Récupération sécurisée du userId depuis la session active
-    const session = await getServerSession(authOptions);
+    let session: any = null;
+    try {
+      session = await getServerSession(authOptions);
+    } catch {
+      // Standalone script ou hors contexte Next.js headers
+    }
     let userId = (session?.user as any)?.id;
     const userEmail = session?.user?.email;
 
@@ -138,6 +146,9 @@ export async function createBookingAction(input: CreateBookingInput) {
       });
     }
 
+    // Détection & normalisation du canal d'acquisition (Meta Ads, TikTok Ads, etc.)
+    const normalizedSource = normalizeTrafficSource(data.source, data.utmSource);
+
     // 4. Transaction Prisma Atomique ($transaction)
     const result = await prisma.$transaction(async (tx) => {
       // Insertion de la réservation : STRICTEMENT PENDING_VERIFICATION et 0 DH comptabilisés tant que non validé par l'admin
@@ -148,6 +159,15 @@ export async function createBookingAction(input: CreateBookingInput) {
           tripId: trip.id,
           departureDateId: selectedDeparture?.id || null,
           status: BookingStatus.PENDING_VERIFICATION, // ⚠️ Toujours PENDING_VERIFICATION par défaut !
+          callStatus: CallStatus.PENDING_CALL,       // ⚠️ Statut d'appel initial garanti : Nouveau prospect à contacter
+          callAttemptsCount: 0,
+          source: normalizedSource,                  // ⚠️ Canal d'acquisition publicitaire rattaché (meta_ads, tiktok_ads, direct, etc.)
+          utmSource: data.utmSource || (normalizedSource !== "direct" ? normalizedSource : null),
+          utmMedium: data.utmMedium || null,
+          utmCampaign: data.utmCampaign || null,
+          pickupCity: data.pickupCity || null,
+          pickupPoint: data.pickupPoint || null,
+          roomPreference: data.roomPreference || null,
           totalAmount,
           depositAmount,
           depositPaid: 0, // ⚠️ 0 tant que l'admin n'a pas validé !
@@ -161,6 +181,8 @@ export async function createBookingAction(input: CreateBookingInput) {
               phone: t.phone || null,
               category: t.category,
               emergencyContact: t.emergencyContact || null,
+              pickupCity: data.pickupCity || undefined,
+              roomType: data.roomPreference || undefined,
             })),
           },
           payments: {
@@ -265,9 +287,38 @@ export async function createBookingAction(input: CreateBookingInput) {
       })();
     }
 
-    revalidatePath("/mon-compte/reservations");
-    revalidatePath("/admin/bookings");
-    revalidatePath("/admin");
+    // Synchronisation automatique vers Google Sheets (asynchrone, non-bloquante)
+    syncBookingToSheetsTask({
+      reference: result.reference,
+      clientName: leadTraveler.fullName,
+      clientPhone: leadTraveler.phone || "—",
+      clientEmail: (leadTraveler as any)?.email || userEmail || "—",
+      tripTitle: trip.titleFr,
+      departureDate: selectedDeparture
+        ? `${new Date(selectedDeparture.startDate).toLocaleDateString("fr-FR")} au ${new Date(selectedDeparture.endDate).toLocaleDateString("fr-FR")}`
+        : "À confirmer",
+      passengersCount: paxCount,
+      totalAmount,
+      depositAmount: Number(result.depositAmount),
+      status: "PENDING_VERIFICATION",
+      callStatus: "PENDING_CALL",
+      source: normalizedSource,
+      pickupCity: data.pickupCity || "Casablanca",
+      pickupPoint: data.pickupPoint || "—",
+      roomPreference: data.roomPreference || "DOUBLE_TWIN",
+      notes: data.notes || "",
+      createdAt: new Date().toLocaleString("fr-FR"),
+    }).catch((sheetErr) => {
+      console.warn("⚠️ [createBookingAction] Synchro Google Sheets non-bloquante :", sheetErr);
+    });
+
+    try {
+      revalidatePath("/mon-compte/reservations");
+      revalidatePath("/admin/bookings");
+      revalidatePath("/admin");
+    } catch {
+      // Ignore si appelé hors cycle de requête HTTP
+    }
 
     return {
       success: true,

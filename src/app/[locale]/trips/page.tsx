@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { 
   MapPin, Calendar, Users, ArrowRight, 
-  Sparkles, Filter, ShieldCheck, Compass, X, RotateCcw, Search 
+  Sparkles, Filter, ShieldCheck, Compass, X, RotateCcw, Search, Layers 
 } from "lucide-react";
 import { TripCard, TripCardProps } from "@/components/shared/TripCard";
 import { HeroSearch } from "@/components/shared/HeroSearch";
@@ -23,6 +23,7 @@ export default async function TripsCatalogPage({
   const rawQuery = typeof searchParams?.q === "string" ? searchParams.q.trim() : undefined;
   const rawCity = typeof searchParams?.city === "string" ? searchParams.city.trim() : undefined;
   const rawDate = typeof searchParams?.date === "string" ? searchParams.date.trim() : undefined;
+  const rawCollection = typeof searchParams?.collection === "string" ? searchParams.collection.trim() : undefined;
 
   // 1. Assainissement des paramètres de requête (Sanitization)
   const isQueryValid = Boolean(
@@ -50,6 +51,14 @@ export default async function TripsCatalogPage({
     /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
   );
   const date = isDateValid ? (rawDate as string) : undefined;
+
+  const isCollectionValid = Boolean(
+    rawCollection &&
+    rawCollection.length > 0 &&
+    rawCollection !== "all" &&
+    rawCollection !== "undefined"
+  );
+  const collectionSlug = isCollectionValid ? (rawCollection as string) : undefined;
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -112,18 +121,44 @@ export default async function TripsCatalogPage({
     });
   }
 
+  // 4. FILTRE PAR COLLECTION / THÉMATIQUE
+  let activeCollection: any = null;
+  if (collectionSlug) {
+    try {
+      activeCollection = await (prisma as any).tripCollection.findFirst({
+        where: {
+          OR: [{ slug: collectionSlug }, { id: collectionSlug }],
+          isActive: true,
+        },
+      });
+    } catch (e) {
+      console.error("Erreur récupération collection:", e);
+    }
+
+    if (activeCollection) {
+      whereConditions.push({
+        collectionId: activeCollection.id,
+      });
+    } else {
+      whereConditions.push({
+        collection: { slug: collectionSlug },
+      });
+    }
+  }
+
   const whereClause: Prisma.TripWhereInput = {
     AND: whereConditions,
   };
 
-  const hasActiveFilters = Boolean(date || query || city);
+  const hasActiveFilters = Boolean(date || query || city || collectionSlug);
 
   // Helper pour générer les liens de suppression individuelle de filtre
-  const createFilterUrl = (excludeKey: "date" | "city" | "q") => {
+  const createFilterUrl = (excludeKey: "date" | "city" | "q" | "collection") => {
     const params = new URLSearchParams();
     if (excludeKey !== "q" && query) params.set("q", query);
     if (excludeKey !== "city" && city) params.set("city", city);
     if (excludeKey !== "date" && date) params.set("date", date);
+    if (excludeKey !== "collection" && collectionSlug) params.set("collection", collectionSlug);
     const qs = params.toString();
     return `/${locale}/trips${qs ? `?${qs}` : ""}`;
   };
@@ -248,6 +283,57 @@ export default async function TripsCatalogPage({
 
       {/* Catalog Grid & Active Filter Pills */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-6">
+        
+        {/* Banner de la Collection sélectionnée */}
+        {activeCollection && (
+          <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 text-white shadow-xl p-6 sm:p-8 animate-in fade-in duration-300">
+            <div className="absolute inset-0 opacity-20 pointer-events-none">
+              <img
+                src={activeCollection.coverImage || "/images/merzouga/cover-merzouga.jpg"}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-transparent" />
+            </div>
+
+            <div className="relative z-10 max-w-2xl space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border ${
+                    activeCollection.scope === "NATIONAL"
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                      : "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                  }`}
+                >
+                  {activeCollection.scope === "NATIONAL" ? "🇲🇦 Circuit National (Maroc)" : "✈️ Séjour International"}
+                </span>
+
+                <span className="text-xs text-slate-400 font-bold">
+                  {isAr ? "مجموعة رحلات مخصصة" : "Collection thématique"}
+                </span>
+              </div>
+
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                {isAr
+                  ? activeCollection.nameAr || activeCollection.nameFr
+                  : locale === "en" && activeCollection.nameEn
+                  ? activeCollection.nameEn
+                  : activeCollection.nameFr}
+              </h2>
+
+              {(activeCollection.descriptionFr || activeCollection.descriptionAr) && (
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  {isAr
+                    ? activeCollection.descriptionAr || activeCollection.descriptionFr
+                    : locale === "en" && activeCollection.descriptionEn
+                    ? activeCollection.descriptionEn
+                    : activeCollection.descriptionFr}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Barre des filtres actifs */}
         {hasActiveFilters && (
           <div className="bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 rounded-2xl p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
@@ -255,6 +341,29 @@ export default async function TripsCatalogPage({
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                 {isAr ? "التصفيات الحالية :" : "Filtres actifs :"}
               </span>
+
+              {/* Collection active */}
+              {collectionSlug && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-tp-cyan/15 text-tp-cyan-hover dark:text-tp-cyan border border-tp-cyan/30 text-xs font-bold">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>
+                    {activeCollection
+                      ? isAr
+                        ? activeCollection.nameAr || activeCollection.nameFr
+                        : locale === "en" && activeCollection.nameEn
+                        ? activeCollection.nameEn
+                        : activeCollection.nameFr
+                      : collectionSlug}
+                  </span>
+                  <Link
+                    href={createFilterUrl("collection")}
+                    className="w-4 h-4 rounded-full bg-tp-cyan/20 hover:bg-rose-500 hover:text-white flex items-center justify-center transition ml-1"
+                    title={isAr ? "إزالة تصفية المجموعة" : "Supprimer ce filtre de collection"}
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </Link>
+                </div>
+              )}
 
               {/* Date active */}
               {date && formattedFilterDate && (

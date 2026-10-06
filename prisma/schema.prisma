@@ -157,6 +157,36 @@ model PasswordResetToken {
 // CIRCUITS & PROGRAMMES
 // ====================================================
 
+enum TripScope {
+  NATIONAL       // Circuits internes au Maroc
+  INTERNATIONAL  // Séjours et circuits à l'étranger
+}
+
+model TripCollection {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  scope           TripScope    @default(NATIONAL)
+  
+  // Titres & Descriptions Trilingues
+  nameFr          String
+  nameAr          String?
+  nameEn          String?
+  descriptionFr   String?      @db.Text
+  descriptionAr   String?      @db.Text
+  descriptionEn   String?      @db.Text
+
+  coverImage      String?      // Image de couverture Cloudflare R2
+  displayOrder    Int          @default(0)
+  isActive        Boolean      @default(true)
+  
+  // Relations
+  trips           Trip[]       @relation("TripToCollection")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([scope, isActive])
+}
+
 enum TripType {
   WEEKEND_BREAK      // Escapade Weekend (2J/1N)
   MULTI_DAY_TOUR     // Grand Tour Découverte (3J à 7J+)
@@ -181,6 +211,9 @@ model Trip {
   slug                String             @unique
   tripType            TripType           @default(MULTI_DAY_TOUR)
   publishStatus       TripPublishStatus  @default(PUBLISHED)
+  scope               TripScope          @default(NATIONAL)
+  collectionId        String?
+  collection          TripCollection?    @relation("TripToCollection", fields: [collectionId], references: [id], onDelete: SetNull)
   durationDays        Int                @default(3)
   durationNights      Int                @default(2)
   destinationRegion   String             // Ex: "Drâa-Tafilalet (Merzouga)", "Nord (Chefchaouen, Akchour)"
@@ -243,6 +276,8 @@ model Trip {
   @@index([agencyId])
   @@index([slug])
   @@index([isScheduledThisWeek])
+  @@index([scope])
+  @@index([collectionId])
 }
 
 model ItineraryDay {
@@ -905,6 +940,42 @@ model BlogPost {
 
   @@index([isPublished, createdAt])
   @@index([category])
+}
+
+// ====================================================
+// PARAMÈTRES GÉNÉRAUX, TRACKING & INTÉGRATIONS
+// ====================================================
+
+model GeneralSettings {
+  id                        String   @id @default("default")
+
+  // 1. Pixels & Identifiants Marketing
+  googleAnalyticsId         String?  @map("google_analytics_id")         // Format G-XXXXXX
+  googleAdsId               String?  @map("google_ads_id")               // Format AW-XXXXXX
+  googleAdsConversionLabel  String?  @map("google_ads_conversion_label") // Label de conversion Google Ads
+  facebookPixelId           String?  @map("facebook_pixel_id")           // Meta / Facebook Pixel ID
+  tiktokPixelId             String?  @map("tiktok_pixel_id")             // TikTok Pixel ID
+  snapchatPixelId           String?  @map("snapchat_pixel_id")           // Snap Pixel ID
+
+  // 2. Scripts Personnalisés
+  customHeadScripts         String?  @map("custom_head_scripts") @db.Text // Injection dans <head>
+  customBodyScripts         String?  @map("custom_body_scripts") @db.Text // Injection dans <body>
+
+  // 3. Configuration des Événements de Conversion
+  conversionEventType       String   @default("lead") @map("conversion_event_type")       // 'page_view' | 'lead' | 'purchase' | 'custom'
+  conversionTriggerType     String   @default("on_submit") @map("conversion_trigger_type") // 'on_submit' | 'on_click' | 'on_page_load'
+
+  // 4. Intégration Google Sheets
+  googleSheetsEnabled       Boolean  @default(false) @map("google_sheets_enabled")
+  googleSheetId             String?  @map("google_sheet_id")
+  googleSheetTabName        String?  @default("Réservations") @map("google_sheet_tab_name")
+  googleSheetsCredentials   String?  @map("google_sheets_credentials") @db.Text // Compte de service JSON
+  googleSheetsWebhookUrl    String?  @map("google_sheets_webhook_url")          // Webhook Apps Script, Make ou n8n
+
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("general_settings")
 }
 
 

@@ -14,6 +14,8 @@ import { formatMAD } from "@/lib/utils";
 import { InvoiceDownloadButton } from "@/components/invoices/InvoiceDownloadButton";
 import { createBookingAction } from "@/actions/booking.actions";
 import { trackClientMetaEvent, generateMetaEventId } from "@/lib/meta-client";
+import { getStoredTrafficAttribution } from "@/lib/attribution";
+import { trackConversion } from "@/lib/tracking";
 
 export interface BookingDepartureDateDto {
   id: string;
@@ -304,6 +306,12 @@ export function BookingCard({
           checkoutEventId
         );
 
+        const attribution = getStoredTrafficAttribution();
+        const selectedPickupObj = effectivePickupPoints.find((p) => p.id === selectedPickup);
+        const resolvedPickupCity = selectedPickupObj?.cityName || "Casablanca";
+        const resolvedPickupPoint = selectedPickupObj?.locationName || undefined;
+        const resolvedRoomPreference = passengers[0]?.roomType || "DOUBLE_TWIN";
+
         const payload = {
           tripId,
           departureDateId: selectedDateId || undefined,
@@ -318,6 +326,13 @@ export function BookingCard({
           paymentOption,
           paymentMethod: paymentMethod === "BANK_TRANSFER" ? ("VIREMENT" as const) : ("CARTE" as const),
           eventId: checkoutEventId,
+          source: attribution.source,
+          utmSource: attribution.utmSource,
+          utmMedium: attribution.utmMedium,
+          utmCampaign: attribution.utmCampaign,
+          pickupCity: resolvedPickupCity,
+          pickupPoint: resolvedPickupPoint,
+          roomPreference: resolvedRoomPreference,
         };
 
         const res = await createBookingAction(payload);
@@ -335,6 +350,18 @@ export function BookingCard({
             },
             leadEventId
           );
+
+          // 4. Déclenchement universel multi-plateformes (Meta, TikTok, Snapchat, Google Ads / GA4)
+          const targetEventType = (typeof window !== "undefined" && window.__RB_TRACKING_CONFIG?.conversionEventType) || "lead";
+          trackConversion(targetEventType, {
+            content_name: tripTitle || "Circuit Rahalat Bladna",
+            content_category: "Circuit Touristique",
+            content_ids: [tripId],
+            currency: "MAD",
+            value: financials.total,
+            order_id: res.reference,
+            num_items: passengers.length,
+          });
 
           setIsSubmitted(true);
           setBookingResult({

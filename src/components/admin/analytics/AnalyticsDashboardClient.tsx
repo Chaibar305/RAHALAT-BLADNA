@@ -7,7 +7,7 @@ import {
   TrendingUp, DollarSign, Calendar, RefreshCw, 
   PhoneCall, Users, Ticket, ArrowUpRight, 
   Compass, Eye, CheckCircle2, Award, Zap,
-  BarChart3, PieChart, Sparkles, Filter, ShieldCheck, Share2
+  BarChart3, PieChart, Sparkles, Filter, ShieldCheck, Share2, Settings
 } from "lucide-react";
 import { AnalyticsData, getAnalyticsMetrics } from "@/actions/analytics.actions";
 
@@ -56,6 +56,9 @@ export function AnalyticsDashboardClient({ initialData, initialPeriod }: Analyti
     }
     if (sourceName.toLowerCase().includes("tiktok")) {
       return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20";
+    }
+    if (sourceName.toLowerCase().includes("snapchat") || sourceName.toLowerCase().includes("snap")) {
+      return "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20";
     }
     if (sourceName.toLowerCase().includes("google")) {
       return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
@@ -249,9 +252,19 @@ export function AnalyticsDashboardClient({ initialData, initialPeriod }: Analyti
                 </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-              ROAS Track
-            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/${locale}/admin/settings`}
+                className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition flex items-center gap-1"
+                title="Gérer les Pixels et clés dans les Paramètres Généraux"
+              >
+                <Settings className="w-3 h-3" />
+                <span>{isAr ? "إدارة البيكسل" : "Gérer les Pixels"}</span>
+              </Link>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                ROAS Track
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3.5">
@@ -266,10 +279,28 @@ export function AnalyticsDashboardClient({ initialData, initialPeriod }: Analyti
                   className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <span className={`px-2.5 py-1 rounded-xl text-xs font-black border ${getSourceIconBg(item.source)}`}>
                         {item.source}
                       </span>
+                      {item.pixelConfigured !== undefined && (
+                        item.pixelConfigured ? (
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1"
+                            title={item.pixelId ? `Pixel configuré : ${item.pixelId}` : "Pixel actif"}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {isAr ? "بيكسل مفعل" : "Pixel Actif"}
+                          </span>
+                        ) : (
+                          <Link
+                            href={`/${locale}/admin/settings`}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 border border-slate-200 dark:border-slate-700 transition"
+                          >
+                            {isAr ? "غير مفعل" : "Non configuré"}
+                          </Link>
+                        )
+                      )}
                       <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                         {item.bookingsCount} {isAr ? "مؤكد" : "confirmés"} / {item.leadsCount} {isAr ? "طلب" : "leads"}
                       </span>

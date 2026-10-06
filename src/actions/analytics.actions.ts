@@ -12,11 +12,13 @@ export interface AnalyticsData {
     averageCart: number;          // Panier moyen en MAD
   };
   trafficSources: Array<{
-    source: string;               // "Meta Ads (FB/IG)", "TikTok Ads", "Google Ads", "Direct / Organique", "WhatsApp"
+    source: string;               // "Meta Ads (Facebook / Instagram)", "TikTok Ads", "Snapchat Ads", "Google Ads (Search)", "WhatsApp Direct", "Direct / Organique"
     leadsCount: number;
     bookingsCount: number;
     conversionRate: number;
     estimatedRevenue: number;
+    pixelConfigured?: boolean;    // Indique si le Pixel est actif dans Paramètres Généraux
+    pixelId?: string | null;      // ID du pixel configuré
   }>;
   topTrips: Array<{
     id: string;
@@ -100,10 +102,16 @@ export async function getAnalyticsMetrics(period: "7d" | "30d" | "month" | "all"
   const conversionRate = totalBookings > 0 ? (confirmed.length / totalBookings) * 100 : 0;
   const averageCart = confirmed.length > 0 ? totalRevenue / confirmed.length : 0;
 
-  // 2. Répartition réelle par canal d'acquisition (source / utmSource)
+  // 2. Répartition réelle par canal d'acquisition (source / utmSource) & statut des Pixels
+  const db = prisma as any;
+  const settings = await db.generalSettings.findUnique({
+    where: { id: "default" },
+  });
+
   const defaultChannels = [
     "Meta Ads (Facebook / Instagram)",
     "TikTok Ads",
+    "Snapchat Ads",
     "Google Ads (Search)",
     "WhatsApp Direct",
     "Direct / Organique",
@@ -122,10 +130,14 @@ export async function getAnalyticsMetrics(period: "7d" | "30d" | "month" | "all"
         sourceKey = "Meta Ads (Facebook / Instagram)";
       } else if (lower.includes("tiktok")) {
         sourceKey = "TikTok Ads";
-      } else if (lower.includes("google") || lower.includes("adwords")) {
+      } else if (lower.includes("snapchat") || lower.includes("snap") || lower === "scclid") {
+        sourceKey = "Snapchat Ads";
+      } else if (lower.includes("google") || lower.includes("adwords") || lower === "gclid") {
         sourceKey = "Google Ads (Search)";
       } else if (lower.includes("whatsapp") || lower.includes("wa")) {
         sourceKey = "WhatsApp Direct";
+      } else if (lower.includes("direct") || lower.includes("organ") || lower.includes("web_form")) {
+        sourceKey = "Direct / Organique";
       } else {
         sourceKey = rawSource;
       }
@@ -142,13 +154,46 @@ export async function getAnalyticsMetrics(period: "7d" | "30d" | "month" | "all"
     }
   });
 
-  const trafficSources = Array.from(sourceMap.entries()).map(([source, data]) => ({
-    source,
-    leadsCount: data.leads,
-    bookingsCount: data.confirmed,
-    conversionRate: data.leads > 0 ? Number(((data.confirmed / data.leads) * 100).toFixed(1)) : 0,
-    estimatedRevenue: data.rev,
-  }));
+  const getPixelStatus = (sourceName: string) => {
+    if (sourceName.includes("Meta")) {
+      return {
+        configured: Boolean(settings?.facebookPixelId),
+        id: settings?.facebookPixelId || null,
+      };
+    }
+    if (sourceName.includes("TikTok")) {
+      return {
+        configured: Boolean(settings?.tiktokPixelId),
+        id: settings?.tiktokPixelId || null,
+      };
+    }
+    if (sourceName.includes("Snapchat")) {
+      return {
+        configured: Boolean(settings?.snapchatPixelId),
+        id: settings?.snapchatPixelId || null,
+      };
+    }
+    if (sourceName.includes("Google")) {
+      return {
+        configured: Boolean(settings?.googleAdsId || settings?.googleAnalyticsId),
+        id: settings?.googleAdsId || settings?.googleAnalyticsId || null,
+      };
+    }
+    return { configured: true, id: null };
+  };
+
+  const trafficSources = Array.from(sourceMap.entries()).map(([source, data]) => {
+    const pixelInfo = getPixelStatus(source);
+    return {
+      source,
+      leadsCount: data.leads,
+      bookingsCount: data.confirmed,
+      conversionRate: data.leads > 0 ? Number(((data.confirmed / data.leads) * 100).toFixed(1)) : 0,
+      estimatedRevenue: data.rev,
+      pixelConfigured: pixelInfo.configured,
+      pixelId: pixelInfo.id,
+    };
+  });
 
   // 3. Top circuits avec taux de remplissage réel calculé
   const tripMap = new Map<string, { 

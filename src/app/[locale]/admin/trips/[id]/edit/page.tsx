@@ -68,6 +68,8 @@ export default async function EditTripPage({
     isScheduledThisWeek: (trip as any).isScheduledThisWeek ?? false,
     featuredWeekMessage: (trip as any).featuredWeekMessage || "",
     isPublished: trip.isActive,
+    scope: (trip as any).scope || "NATIONAL",
+    collectionId: (trip as any).collectionId || null,
     pickupPoints: trip.pickupPoints?.map((p: any) => ({
       id: p.id,
       cityName: p.cityName || p.city || "",

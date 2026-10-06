@@ -19,6 +19,15 @@ export const CreateBookingSchema = z.object({
   receiptUrl: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   eventId: z.string().optional().nullable(),
+  // Attribution publicitaire (Meta Ads, TikTok Ads, etc.)
+  source: z.string().optional().nullable(),
+  utmSource: z.string().optional().nullable(),
+  utmMedium: z.string().optional().nullable(),
+  utmCampaign: z.string().optional().nullable(),
+  // Logistique départ & hébergement
+  pickupCity: z.string().optional().nullable(),
+  pickupPoint: z.string().optional().nullable(),
+  roomPreference: z.string().optional().nullable(),
 });
 
 export type CreateBookingInput = z.infer<typeof CreateBookingSchema>;

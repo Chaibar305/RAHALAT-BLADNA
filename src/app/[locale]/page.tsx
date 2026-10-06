@@ -8,6 +8,7 @@ import {
 import { HeroSection } from "@/components/hero/HeroSection";
 import { WeekendCarousel } from "@/components/shared/WeekendCarousel";
 import { TripFilterTabs } from "@/components/shared/TripFilterTabs";
+import { HomeCollectionsSection } from "@/components/home/HomeCollectionsSection";
 import { TailorMadeSection } from "@/components/shared/TailorMadeSection";
 import { B2BSection } from "@/components/shared/B2BSection";
 import { WhyChooseUsSection } from "@/components/shared/WhyChooseUsSection";
@@ -17,6 +18,7 @@ import { BlogInspirationSection } from "@/components/shared/BlogInspirationSecti
 import { FaqSection } from "@/components/shared/FaqSection";
 import { TripCardProps } from "@/components/shared/TripCard";
 import { prisma } from "@/lib/prisma";
+import { getActiveCollectionsForHome } from "@/actions/trip-collection.actions";
 
 /**
  * Mappe un circuit Prisma vers les props du composant TripCard
@@ -97,27 +99,33 @@ export default async function HomePage({
   const t = await getTranslations({ locale, namespace: "home" });
   const brand = await getTranslations({ locale, namespace: "brand" });
 
-  // Récupération des circuits RÉELS depuis Supabase PostgreSQL
+  // Récupération des circuits RÉELS et des collections actives depuis Supabase PostgreSQL
   let weekendTrips: TripCardProps[] = [];
   let catalogTrips: TripCardProps[] = [];
+  let collections: any[] = [];
 
   try {
-    const dbTrips = await prisma.trip.findMany({
-      where: {
-        isActive: true,
-        publishStatus: "PUBLISHED",
-      },
-      include: {
-        departureDates: {
-          orderBy: { startDate: "asc" },
+    const [dbTrips, homeCollections] = await Promise.all([
+      prisma.trip.findMany({
+        where: {
+          isActive: true,
+          publishStatus: "PUBLISHED",
         },
-      },
-      orderBy: [
-        { isScheduledThisWeek: "desc" },
-        { isFeatured: "desc" },
-        { createdAt: "desc" },
-      ],
-    });
+        include: {
+          departureDates: {
+            orderBy: { startDate: "asc" },
+          },
+        },
+        orderBy: [
+          { isScheduledThisWeek: "desc" },
+          { isFeatured: "desc" },
+          { createdAt: "desc" },
+        ],
+      }),
+      getActiveCollectionsForHome(),
+    ]);
+
+    collections = homeCollections || [];
 
     // Séparer les circuits par type : Weekend (court) vs Catalogue (tous)
     const weekendTypes = ["WEEKEND_BREAK", "DAY_TRIP"];
@@ -149,7 +157,12 @@ export default async function HomePage({
       <WeekendCarousel trips={weekendTrips} />
 
       {/* ========================================================================= */}
-      {/* 3. SIGNATURE TOURS CATALOG WITH THEMATIC TABS */}
+      {/* 3. THEMATIC & GEOGRAPHIC COLLECTIONS (NATIONAL 🇲🇦 & INTERNATIONAL ✈️) */}
+      {/* ========================================================================= */}
+      <HomeCollectionsSection collections={collections} />
+
+      {/* ========================================================================= */}
+      {/* 4. SIGNATURE TOURS CATALOG WITH THEMATIC TABS */}
       {/* ========================================================================= */}
       <TripFilterTabs trips={catalogTrips} />
 

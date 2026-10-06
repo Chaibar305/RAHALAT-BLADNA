@@ -6,6 +6,9 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { FacebookPixel } from "@/components/analytics/FacebookPixel";
+import { AttributionTracker } from "@/components/analytics/AttributionTracker";
+import { DynamicTracker } from "@/components/analytics/DynamicTracker";
+import { getPublicTrackingConfigAction } from "@/actions/settings.actions";
 import { Analytics } from "@vercel/analytics/next";
 import "../globals.css";
 
@@ -47,6 +50,7 @@ export default async function LocaleLayout({
 }) {
   const isRtl = locale === "ar";
   const messages = await getMessages();
+  const trackingConfig = await getPublicTrackingConfigAction();
 
   return (
     <html
@@ -57,34 +61,7 @@ export default async function LocaleLayout({
     >
       <head>
         <meta name="facebook-domain-verification" content="ztmjvrdrcuao4ixbo2nhfaxrvroxde" />
-        {/* Facebook Pixel Code */}
-        <script
-          id="facebook-pixel-base"
-          dangerouslySetInnerHTML={{
-            __html: `
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window,document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '1384107910546340');
-              fbq('track', 'PageView');
-            `,
-          }}
-        />
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: "none" }}
-            src="https://www.facebook.com/tr?id=1384107910546340&ev=PageView&noscript=1"
-            alt=""
-          />
-        </noscript>
-        {/* End Facebook Pixel Code */}
+        <DynamicTracker config={trackingConfig} />
       </head>
       <body
         className={`min-h-screen ${
@@ -92,6 +69,7 @@ export default async function LocaleLayout({
         } antialiased selection:bg-tp-cyan-soft selection:text-tp-midnight`}
       >
         <FacebookPixel />
+        <AttributionTracker />
         <AuthProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem>

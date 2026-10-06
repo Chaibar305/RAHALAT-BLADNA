@@ -7,7 +7,8 @@ import {
   Plus, Search, Filter, Edit, Copy, Trash2, 
   Eye, CheckCircle2, Clock, Bus, MapPin, 
   Sparkles, AlertCircle, ShieldCheck, ArrowUpDown, 
-  Users, UserCheck, Building2, TrendingUp, Flame 
+  Users, UserCheck, Building2, TrendingUp, Flame,
+  Layers, FolderTree, Globe
 } from "lucide-react";
 import { formatMAD } from "@/lib/utils";
 import { 
@@ -15,22 +16,29 @@ import {
   duplicateTripAction, 
   toggleTripPublishAction 
 } from "@/actions/trip.actions";
+import { SerializedCollection } from "@/actions/collection.actions";
 import { ScheduleThisWeekModal } from "./ScheduleThisWeekModal";
+import { CollectionsManagerModal } from "./CollectionsManagerModal";
 
 interface AdminTripListProps {
   initialTrips: any[];
+  initialCollections?: SerializedCollection[];
 }
 
-export function AdminTripList({ initialTrips }: AdminTripListProps) {
+export function AdminTripList({ initialTrips, initialCollections = [] }: AdminTripListProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
   const [isPending, startTransition] = useTransition();
 
   const [trips, setTrips] = useState(initialTrips);
+  const [collections, setCollections] = useState<SerializedCollection[]>(initialCollections);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PUBLISHED" | "DRAFT" | "GUARANTEED" | "WEEK_STAR">("ALL");
+  const [scopeFilter, setScopeFilter] = useState<"ALL" | "NATIONAL" | "INTERNATIONAL">("ALL");
+  const [collectionFilter, setCollectionFilter] = useState<string>("ALL");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedTripForSchedule, setSelectedTripForSchedule] = useState<any | null>(null);
+  const [isCollectionsModalOpen, setIsCollectionsModalOpen] = useState(false);
 
   // Filtering
   const filteredTrips = trips.filter((trip) => {
@@ -42,10 +50,25 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
 
     if (!matchesSearch) return false;
 
-    if (statusFilter === "PUBLISHED") return trip.isActive || trip.publishStatus === "PUBLISHED";
-    if (statusFilter === "DRAFT") return !trip.isActive || trip.publishStatus === "DRAFT";
-    if (statusFilter === "GUARANTEED") return trip.isFeatured;
-    if (statusFilter === "WEEK_STAR") return trip.isScheduledThisWeek;
+    // Status filter
+    if (statusFilter === "PUBLISHED" && (!trip.isActive && trip.publishStatus !== "PUBLISHED")) return false;
+    if (statusFilter === "DRAFT" && (trip.isActive || trip.publishStatus === "PUBLISHED")) return false;
+    if (statusFilter === "GUARANTEED" && !trip.isFeatured) return false;
+    if (statusFilter === "WEEK_STAR" && !trip.isScheduledThisWeek) return false;
+
+    // Scope filter (National vs International)
+    const tripScope = trip.scope || "NATIONAL";
+    if (scopeFilter !== "ALL" && tripScope !== scopeFilter) return false;
+
+    // Collection filter
+    if (collectionFilter !== "ALL") {
+      if (collectionFilter === "UNASSIGNED") {
+        if (trip.collectionId) return false;
+      } else {
+        if (trip.collectionId !== collectionFilter) return false;
+      }
+    }
+
     return true;
   });
 
@@ -120,6 +143,17 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCollectionsModalOpen(true)}
+            className="px-4 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-tp-cyan text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center gap-2"
+          >
+            <Layers className="w-4 h-4 text-tp-cyan" />
+            <span>{isAr ? "إدارة المجموعات" : "Gérer les Collections"}</span>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500">
+              {collections.length}
+            </span>
+          </button>
+
           <Link
             href={`/${locale}/admin/trips/new`}
             className="px-5 py-2.5 rounded-2xl bg-tp-cyan hover:bg-tp-cyan-hover text-white dark:text-slate-950 font-black text-xs sm:text-sm shadow-tp-cyan transition-all active:scale-95 flex items-center gap-2"
@@ -137,7 +171,7 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
         </div>
       )}
 
-      {/* Filter and Search Bar */}
+      {/* Filter and Search Bar (Status & Search) */}
       <div className="flex flex-col sm:flex-row gap-3 bg-white dark:bg-slate-950 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3.5" />
@@ -172,6 +206,78 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
               {item.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Scope & Collection Fast Filters Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-950 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+        {/* Scope fast filters */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider shrink-0 me-1">
+            {isAr ? "النطاق:" : "Périmètre :"}
+          </span>
+
+          <button
+            onClick={() => setScopeFilter("ALL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              scopeFilter === "ALL"
+                ? "bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-sm"
+                : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
+            }`}
+          >
+            <span>{isAr ? "الكل" : "Tous"}</span>
+            <span className="text-[10px] opacity-75 font-mono">({trips.length})</span>
+          </button>
+
+          <button
+            onClick={() => setScopeFilter("NATIONAL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              scopeFilter === "NATIONAL"
+                ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30"
+            }`}
+          >
+            <span>🇲🇦</span>
+            <span>{isAr ? "رحلات وطنية" : "National"}</span>
+            <span className="text-[10px] opacity-75 font-mono">
+              ({trips.filter((t) => (t.scope || "NATIONAL") === "NATIONAL").length})
+            </span>
+          </button>
+
+          <button
+            onClick={() => setScopeFilter("INTERNATIONAL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              scopeFilter === "INTERNATIONAL"
+                ? "bg-sky-500 text-white shadow-sm shadow-sky-500/20"
+                : "bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 border border-sky-500/30"
+            }`}
+          >
+            <span>✈️</span>
+            <span>{isAr ? "رحلات دولية" : "International"}</span>
+            <span className="text-[10px] opacity-75 font-mono">
+              ({trips.filter((t) => t.scope === "INTERNATIONAL").length})
+            </span>
+          </button>
+        </div>
+
+        {/* Collection Filter Dropdown */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider shrink-0">
+            {isAr ? "المجموعة:" : "Collection :"}
+          </span>
+          <select
+            value={collectionFilter}
+            onChange={(e) => setCollectionFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-tp-cyan cursor-pointer"
+          >
+            <option value="ALL">{isAr ? "جميع المجموعات" : "Toutes les collections"}</option>
+            <option value="UNASSIGNED">{isAr ? "بدون مجموعة" : "Sans collection"}</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.scope === "NATIONAL" ? "🇲🇦" : "✈️"} {c.nameFr}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -213,6 +319,28 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
                           </div>
                           <div className="min-w-0 max-w-xs sm:max-w-sm">
                             <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Scope Badge (National / International) */}
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider border ${
+                                  (trip.scope || "NATIONAL") === "NATIONAL"
+                                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                                    : "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                                }`}
+                              >
+                                {(trip.scope || "NATIONAL") === "NATIONAL" ? "🇲🇦 National" : "✈️ International"}
+                              </span>
+
+                              {/* Collection Badge */}
+                              {trip.collection && (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[9.5px] font-bold"
+                                  title={`Collection: ${trip.collection.nameFr}`}
+                                >
+                                  <Layers className="w-2.5 h-2.5 text-tp-cyan" />
+                                  <span>{trip.collection.nameFr}</span>
+                                </span>
+                              )}
+
                               <p className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm line-clamp-1 group-hover:text-tp-cyan transition">
                                 {trip.titleFr}
                               </p>
@@ -390,6 +518,16 @@ export function AdminTripList({ initialTrips }: AdminTripListProps) {
           }}
         />
       )}
+
+      {/* Modal de Gestion des Collections & Catégories */}
+      <CollectionsManagerModal
+        isOpen={isCollectionsModalOpen}
+        onClose={() => setIsCollectionsModalOpen(false)}
+        collections={collections}
+        onCollectionsChange={(updated) => setCollections(updated)}
+      />
     </div>
   );
 }
+
+

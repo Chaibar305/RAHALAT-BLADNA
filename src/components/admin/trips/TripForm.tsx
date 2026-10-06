@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
@@ -9,19 +9,21 @@ import {
   Sparkles, Image as ImageIcon, MapPin, Calendar, 
   DollarSign, CheckCircle2, AlertCircle, Eye, BedDouble, 
   Bus, Tag, UtensilsCrossed, ShieldCheck, Clock, Layers, Navigation,
-  Check, X, Luggage, Flame, Compass, Copy, Languages, Globe
+  Check, X, Luggage, Flame, Compass, Copy, Languages, Globe, FolderTree
 } from "lucide-react";
 import { TripFormData, ItineraryDayData, DepartureDateAdminData, PickupPointAdminData } from "@/lib/validations/trip.schema";
 import { createTripAction, updateTripAction } from "@/actions/trip.actions";
+import { getCollectionsAction, SerializedCollection } from "@/actions/collection.actions";
 import { R2ImageUploader } from "@/components/admin/R2ImageUploader";
 import { formatMAD } from "@/lib/utils";
 
 interface TripFormProps {
   initialData?: Partial<TripFormData>;
   isEditing?: boolean;
+  availableCollections?: SerializedCollection[];
 }
 
-export function TripForm({ initialData, isEditing = false }: TripFormProps) {
+export function TripForm({ initialData, isEditing = false, availableCollections }: TripFormProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
   const router = useRouter();
@@ -30,10 +32,23 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
   const [activeTab, setActiveTab] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [collections, setCollections] = useState<SerializedCollection[]>(availableCollections || []);
+
+  useEffect(() => {
+    if (!availableCollections || availableCollections.length === 0) {
+      getCollectionsAction().then((res) => {
+        if (res.success && res.collections) {
+          setCollections(res.collections);
+        }
+      });
+    }
+  }, [availableCollections]);
 
   // Form State
   const [formData, setFormData] = useState<TripFormData>({
     id: initialData?.id,
+    scope: (initialData?.scope as any) || "NATIONAL",
+    collectionId: initialData?.collectionId || null,
     titleFr: initialData?.titleFr || "",
     titleAr: initialData?.titleAr || "",
     titleEn: initialData?.titleEn || "",
@@ -1007,6 +1022,76 @@ export function TripForm({ initialData, isEditing = false }: TripFormProps) {
                   onChange={(e) => setFormData({ ...formData, destinationRegion: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-sm transition-all"
                 />
+              </div>
+            </div>
+
+            {/* Périmètre (National / International) & Collection Thématique */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                  <span>{isAr ? "نطاق وتصنيف الرحلة" : "Périmètre & Collection Thématique"}</span>
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {formData.scope === "NATIONAL" ? "🇲🇦 Circuit Maroc" : "✈️ Séjour Étranger"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Scope Selector */}
+                <div className="space-y-1.5">
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1">
+                    {isAr ? "النطاق الجغرافي *" : "Périmètre Géographique *"}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, scope: "NATIONAL" })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
+                        formData.scope === "NATIONAL"
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/50 shadow-sm"
+                          : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300"
+                      }`}
+                    >
+                      <span>🇲🇦</span>
+                      <span>{isAr ? "وطني (المغرب)" : "National"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, scope: "INTERNATIONAL" })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
+                        formData.scope === "INTERNATIONAL"
+                          ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/50 shadow-sm"
+                          : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300"
+                      }`}
+                    >
+                      <span>✈️</span>
+                      <span>{isAr ? "دولي (الخارج)" : "International"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Collection Selector */}
+                <div className="space-y-1.5">
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-semibold mb-1">
+                    {isAr ? "المجموعة / التصنيف" : "Collection / Catégorie"}
+                  </label>
+                  <select
+                    value={formData.collectionId || ""}
+                    onChange={(e) => setFormData({ ...formData, collectionId: e.target.value || null })}
+                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-xs font-bold transition-all"
+                  >
+                    <option value="">
+                      {isAr ? "-- بدون مجموعة (رحلة مستقلة) --" : "-- Aucune collection (Circuit indépendant) --"}
+                    </option>
+                    {collections.map((col) => (
+                      <option key={col.id} value={col.id}>
+                        {col.scope === "NATIONAL" ? "🇲🇦" : "✈️"} {col.nameFr} {col.nameAr ? `(${col.nameAr})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 

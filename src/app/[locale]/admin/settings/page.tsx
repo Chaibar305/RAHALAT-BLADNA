@@ -2,6 +2,7 @@ import React from "react";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
 import { AgencySettingsManager } from "@/components/admin/settings/AgencySettingsManager";
+import { TrackingSettingsManager } from "@/components/admin/settings/TrackingSettingsManager";
 import {
   Settings,
   ShieldCheck,
@@ -23,6 +24,24 @@ export default async function AdminSettingsPage({
   const agency = await prisma.agency.findFirst({
     orderBy: { createdAt: "asc" },
   });
+
+  // Charger les paramètres généraux de tracking & intégrations
+  const db = prisma as any;
+  let generalSettings = await db.generalSettings.findUnique({
+    where: { id: "default" },
+  });
+
+  if (!generalSettings) {
+    generalSettings = await db.generalSettings.create({
+      data: {
+        id: "default",
+        facebookPixelId: "1384107910546340",
+        conversionEventType: "lead",
+        conversionTriggerType: "on_submit",
+        googleSheetTabName: "Réservations",
+      },
+    });
+  }
 
   const agencyData = agency
     ? {
@@ -115,6 +134,9 @@ export default async function AdminSettingsPage({
           </div>
         </div>
       </div>
+
+      {/* Card 2.5: Tracking, Pixels & Synchronisation Google Sheets */}
+      <TrackingSettingsManager initialSettings={generalSettings} />
 
       {/* Card 3: Lien vers la gestion d'équipe centralisée */}
       <div className="bg-white dark:bg-slate-950 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">

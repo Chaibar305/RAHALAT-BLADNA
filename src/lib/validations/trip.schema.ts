@@ -88,6 +88,8 @@ export const TripFormSchema = z.object({
   isScheduledThisWeek: z.boolean().default(false),
   featuredWeekMessage: z.string().optional().nullable(),
   isPublished: z.boolean().default(true),
+  scope: z.enum(["NATIONAL", "INTERNATIONAL"]).default("NATIONAL"),
+  collectionId: z.string().optional().nullable(),
   pickupPoints: z.array(PickupPointAdminSchema).default([]),
   itineraryDays: z.array(ItineraryDaySchema).default([]),
   departures: z.array(DepartureDateAdminSchema).default([]),
@@ -114,7 +116,27 @@ export const TripFormSchema = z.object({
   whatToBring: z.array(z.string()).default([]),
 });
 
+export const TripCollectionSchema = z.object({
+  id: z.string().optional(),
+  slug: z
+    .string()
+    .min(2, "Le slug doit contenir au moins 2 caractères")
+    .regex(/^[a-z0-9-]+$/, "Format de slug invalide (ex: sahara-bivouac)"),
+  scope: z.enum(["NATIONAL", "INTERNATIONAL"]).default("NATIONAL"),
+  nameFr: z.string().min(2, "Le nom français est requis"),
+  nameAr: z.string().optional().nullable(),
+  nameEn: z.string().optional().nullable(),
+  descriptionFr: z.string().optional().nullable(),
+  descriptionAr: z.string().optional().nullable(),
+  descriptionEn: z.string().optional().nullable(),
+  coverImage: z.string().optional().nullable(),
+  displayOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+});
+
+export type TripCollectionFormData = z.infer<typeof TripCollectionSchema>;
 export type TripFormData = z.infer<typeof TripFormSchema>;
 export type ItineraryDayData = z.infer<typeof ItineraryDaySchema>;
 export type DepartureDateAdminData = z.infer<typeof DepartureDateAdminSchema>;
 export type PickupPointAdminData = z.infer<typeof PickupPointAdminSchema>;
+

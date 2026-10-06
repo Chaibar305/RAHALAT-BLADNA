@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { TripFormSchema, TripFormData } from "@/lib/validations/trip.schema";
 
+const db = prisma as any;
+
 /**
  * Récupère tous les circuits réels pour le tableau d'administration
  */
@@ -12,8 +14,9 @@ export async function getAdminTripsAction() {
   await requireAdminSession("VIEW_ADMIN_TRIPS");
 
   try {
-    const dbTrips = await prisma.trip.findMany({
+    const dbTrips = await db.trip.findMany({
       include: {
+        collection: true,
         pickupPoints: { orderBy: { orderIndex: "asc" } },
         departureDates: { orderBy: { startDate: "asc" } },
         itineraryDays: { orderBy: { dayNumber: "asc" } },
@@ -41,11 +44,12 @@ export async function getTripByIdAction(id: string) {
   await requireAdminSession("GET_TRIP_BY_ID");
 
   try {
-    const dbTrip = await prisma.trip.findFirst({
+    const dbTrip = await db.trip.findFirst({
       where: {
         OR: [{ id }, { slug: id }],
       },
       include: {
+        collection: true,
         pickupPoints: { orderBy: { orderIndex: "asc" } },
         departureDates: { orderBy: { startDate: "asc" } },
         itineraryDays: { orderBy: { dayNumber: "asc" } },
@@ -112,6 +116,8 @@ export async function createTripAction(data: TripFormData) {
           slug: validData.slug,
           tripType: (validData.tripType as any) || "MULTI_DAY_TOUR",
           publishStatus: validData.isPublished ? "PUBLISHED" : "DRAFT",
+          scope: (validData.scope as any) || "NATIONAL",
+          collectionId: validData.collectionId || null,
           destinationRegion: validData.destinationRegion,
           departureCity: validData.departureCity,
           durationDays: validData.durationDays,
@@ -269,6 +275,8 @@ export async function updateTripAction(id: string, data: TripFormData) {
           slug: validData.slug,
           tripType: (validData.tripType as any) || "MULTI_DAY_TOUR",
           publishStatus: validData.isPublished ? "PUBLISHED" : "DRAFT",
+          scope: (validData.scope as any) || "NATIONAL",
+          collectionId: validData.collectionId || null,
           destinationRegion: validData.destinationRegion,
           departureCity: validData.departureCity,
           durationDays: validData.durationDays,
@@ -683,3 +691,35 @@ export async function getScheduledThisWeekTripAction() {
     return { success: false, trip: null };
   }
 }
+
+/**
+ * Mise à jour rapide du périmètre (National / International) et de la collection d'un circuit
+ */
+export async function updateTripScopeAndCollectionAction(
+  tripId: string,
+  scope: "NATIONAL" | "INTERNATIONAL",
+  collectionId?: string | null
+) {
+  await requireAdminSession("UPDATE_TRIP_SCOPE_COLLECTION");
+
+  try {
+    const updated = await db.trip.update({
+      where: { id: tripId },
+      data: {
+        scope: scope as any,
+        collectionId: collectionId !== undefined ? collectionId : undefined,
+      },
+      include: {
+        collection: true,
+      },
+    });
+
+    revalidatePath("/admin/trips");
+    revalidatePath("/[locale]/admin/trips", "page");
+    return { success: true, trip: JSON.parse(JSON.stringify(updated)) };
+  } catch (error: any) {
+    console.error("Erreur updateTripScopeAndCollectionAction:", error);
+    return { success: false, error: error.message || "Erreur de mise à jour" };
+  }
+}
+
