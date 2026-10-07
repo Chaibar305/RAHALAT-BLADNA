@@ -16,6 +16,7 @@ import {
   LogIn, UserPlus, Ticket, LogOut, Home, Palmtree, MessageCircle,
   Instagram, Facebook, UserCheck, BookOpen
 } from "lucide-react";
+import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
 
 export function Header() {
   const pathname = usePathname();
@@ -23,6 +24,7 @@ export function Header() {
   const locale = useLocale();
   const isAr = locale === "ar";
   const { data: session } = useSession();
+  const { cleanPhone } = useAgencySettings();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -129,7 +131,7 @@ export function Header() {
             </div>
 
             <a
-              href="https://wa.me/212681024758"
+              href={`https://wa.me/${cleanPhone}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 bg-tp-ok-bg/50 hover:bg-tp-ok-bg text-tp-ok-fg px-3 py-2 rounded-control text-xs font-extrabold border border-tp-ok-fg/20 transition-all shadow-tp-sm active:scale-95"
@@ -332,7 +334,7 @@ export function Header() {
 
               {/* WhatsApp Direct Assistance */}
               <a
-                href="https://wa.me/212681024758"
+                href={`https://wa.me/${cleanPhone}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg transition active:scale-95"

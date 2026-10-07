@@ -2,6 +2,7 @@ import React from "react";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
 import { AgencySettingsManager } from "@/components/admin/settings/AgencySettingsManager";
+import { getAgencySettingsAction } from "@/actions/agency.actions";
 import { TrackingSettingsManager } from "@/components/admin/settings/TrackingSettingsManager";
 import {
   Settings,
@@ -20,10 +21,8 @@ export default async function AdminSettingsPage({
   await requireAdminSession("ADMIN_SETTINGS_PAGE", locale);
   const isAr = locale === "ar";
 
-  // Charger les données de l'agence depuis la DB
-  const agency = await prisma.agency.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
+  // Charger les coordonnées officielles de l'agence depuis la DB (singleton)
+  const agencySettings = await getAgencySettingsAction();
 
   // Charger les paramètres généraux de tracking & intégrations
   const db = prisma as any;
@@ -42,21 +41,6 @@ export default async function AdminSettingsPage({
       },
     });
   }
-
-  const agencyData = agency
-    ? {
-        id: agency.id,
-        name: agency.name,
-        phone: agency.phone,
-        email: agency.email,
-        city: agency.city,
-        address: agency.address,
-        licenseNumber: agency.licenseNumber,
-        iceNumber: agency.iceNumber,
-        rcNumber: agency.rcNumber,
-        bankAccounts: agency.bankAccounts,
-      }
-    : null;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -83,7 +67,7 @@ export default async function AdminSettingsPage({
       {/* Settings Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Card 1: Editable Agency Info */}
-        <AgencySettingsManager initialAgency={agencyData} />
+        <AgencySettingsManager initialSettings={agencySettings} />
 
         {/* Card 2: Infrastructure & Sécurité */}
         <div className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 flex flex-col justify-between transition-colors">

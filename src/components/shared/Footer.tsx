@@ -7,14 +7,16 @@ import { useTranslations, useLocale } from "next-intl";
 import { Logo } from "./Logo";
 import { 
   Phone, Mail, MapPin, Heart, 
-  Instagram, Facebook, Send, CreditCard, Sparkles 
+  Instagram, Facebook, Send, CreditCard, Sparkles, Building2
 } from "lucide-react";
+import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
 
 export function Footer() {
   const pathname = usePathname();
   const t = useTranslations("nav");
   const homeT = useTranslations("home");
   const locale = useLocale();
+  const { settings } = useAgencySettings();
 
   // Masquer complètement le footer public sur l'espace d'administration
   if (pathname?.includes("/admin")) {
@@ -214,20 +216,28 @@ export function Footer() {
             <ul className="space-y-2.5">
               <li className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-tp-cyan shrink-0" />
-                <a href="tel:+212681024758" className="hover:text-white transition font-mono">
-                  +212 681-024758
+                <a href={`tel:${settings.whatsappPhone}`} className="hover:text-white transition font-mono">
+                  {settings.whatsappPhone}
                 </a>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-tp-cyan shrink-0" />
-                <a href="mailto:contact@rahalatbladna.ma" className="hover:text-white transition font-mono">
-                  contact@rahalatbladna.ma
+                <a href={`mailto:${settings.email}`} className="hover:text-white transition font-mono">
+                  {settings.email}
                 </a>
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-tp-cyan shrink-0 mt-0.5" />
-                <span>Casablanca & Rabat, Maroc</span>
+                <span>{settings.address || `${settings.city}, Maroc`}</span>
               </li>
+              {(settings.ice || settings.licenseNumber) && (
+                <li className="text-[11px] text-tp-ivory/60 font-mono pt-1">
+                  {[
+                    settings.licenseNumber ? (locale === "ar" ? `رخصة : ${settings.licenseNumber}` : `Licence : ${settings.licenseNumber}`) : null,
+                    settings.ice ? `ICE : ${settings.ice}` : null,
+                  ].filter(Boolean).join(" • ")}
+                </li>
+              )}
               <li className="pt-2 border-t border-white/10 flex items-center gap-2">
                 <a
                   href="https://www.instagram.com/rahalat_bladna/"
@@ -278,7 +288,7 @@ export function Footer() {
 
           <div className="text-center md:text-end">
             <p>
-              © {new Date().getFullYear()} <strong className="text-white font-bold">Rahalat Bladna (رحلات بلادنا)</strong>. Tous droits réservés.
+              © {new Date().getFullYear()} <strong className="text-white font-bold">{settings.companyName || "Rahalat Bladna"}</strong>. Tous droits réservés.
             </p>
           </div>
         </div>

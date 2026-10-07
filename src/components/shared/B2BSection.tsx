@@ -6,10 +6,12 @@ import {
   Briefcase, Users, Trophy, Award, 
   ArrowRight, CheckCircle, Sparkles, Building2 
 } from "lucide-react";
+import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
 
 export function B2BSection() {
   const locale = useLocale();
   const t = useTranslations("home");
+  const { whatsappUrl } = useAgencySettings();
 
   const clients = [
     "Maroc Telecom",
@@ -53,7 +55,7 @@ export function B2BSection() {
           </div>
 
           <a
-            href="https://wa.me/212681024758?text=Bonjour%20Rahalat%20Bladna,%20nous%20souhaitons%20organiser%20un%20Team%20Building%20/%20S%C3%A9minaire%20pour%20notre%20entreprise."
+            href={whatsappUrl("Bonjour Rahalat Bladna, nous souhaitons organiser un Team Building / Séminaire pour notre entreprise.")}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-tp-cyan hover:bg-tp-cyan-hover text-white font-black text-xs sm:text-sm px-6 py-3.5 rounded-control shadow-tp-cyan transition-all active:scale-95 self-start md:self-auto shrink-0"

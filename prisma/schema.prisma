@@ -980,5 +980,29 @@ model GeneralSettings {
   @@map("general_settings")
 }
 
+// ====================================================
+// COORDONNÉES OFFICIELLES DE L'AGENCE (SINGLETON)
+// ====================================================
+
+model AgencySettings {
+  id              String   @id @default("default_agency")
+  companyName     String   @default("Rahalat Bladna") @map("company_name")
+  whatsappPhone   String   @default("+212681024758") @map("whatsapp_phone")
+  email           String   @default("contact@rahalatbladna.ma")
+  city            String   @default("Rabat")
+  address         String?  @default("Rabat & Casablanca, Maroc")
+  licenseNumber   String?  @map("license_number") // N° d'Agrément Ministère du Tourisme
+  ice             String?  // Identifiant Commun de l'Entreprise (15 chiffres)
+  rc              String?  // Registre de Commerce
+  taxId           String?  @map("tax_id") // Identifiant Fiscal (IF)
+  bankRib         String?  @map("bank_rib") // RIB bancaire complet (24 chiffres pour virements)
+  bankName        String?  @default("Attijariwafa / CIH Bank") @map("bank_name")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("agency_settings")
+}
+
 
 

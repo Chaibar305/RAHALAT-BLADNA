@@ -9,6 +9,8 @@ import { FacebookPixel } from "@/components/analytics/FacebookPixel";
 import { AttributionTracker } from "@/components/analytics/AttributionTracker";
 import { DynamicTracker } from "@/components/analytics/DynamicTracker";
 import { getPublicTrackingConfigAction } from "@/actions/settings.actions";
+import { getPublicAgencySettingsAction } from "@/actions/agency.actions";
+import { AgencySettingsProvider } from "@/components/providers/AgencySettingsProvider";
 import { Analytics } from "@vercel/analytics/next";
 import "../globals.css";
 
@@ -51,6 +53,7 @@ export default async function LocaleLayout({
   const isRtl = locale === "ar";
   const messages = await getMessages();
   const trackingConfig = await getPublicTrackingConfigAction();
+  const agencySettings = await getPublicAgencySettingsAction();
 
   return (
     <html
@@ -73,9 +76,11 @@ export default async function LocaleLayout({
         <AuthProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-              <PublicLayout>
-                {children}
-              </PublicLayout>
+              <AgencySettingsProvider initialSettings={agencySettings}>
+                <PublicLayout>
+                  {children}
+                </PublicLayout>
+              </AgencySettingsProvider>
             </ThemeProvider>
           </NextIntlClientProvider>
         </AuthProvider>

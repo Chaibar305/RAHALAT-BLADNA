@@ -7,6 +7,11 @@ import path from "path";
 // Moteur de mise en forme arabe cursif (Shaping) et réordonnancement bidirectionnel (BiDi UAX #9)
 import { ArabicShaper } from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
+import { 
+  getAgencySettingsAction, 
+  AgencySettingsData, 
+  DEFAULT_AGENCY_SETTINGS 
+} from "@/actions/agency.actions";
 
 const bidi = bidiFactory();
 
@@ -65,8 +70,8 @@ export interface InvoicePdfData {
   // Compatibilité optionnelle
   totalHt?: number;
   tvaRate?: number;
-  tvaAmount?: number;
-  agencyName?: string;
+  // Coordonnées officielles dynamiques de l'agence
+  agencySettings?: Partial<AgencySettingsData>;
 }
 
 // Mise en cache des polices en mémoire
@@ -164,6 +169,17 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   const isPartner = data.isPartnerDocument === true || data.documentType === "DEVIS" || data.documentNumber.startsWith("DEV");
   const isDevis = data.documentType === "DEVIS";
 
+  // Résolution dynamique des coordonnées officielles de l'agence
+  let liveAgency = data.agencySettings;
+  if (!liveAgency || !liveAgency.companyName) {
+    try {
+      liveAgency = await getAgencySettingsAction();
+    } catch {
+      liveAgency = DEFAULT_AGENCY_SETTINGS;
+    }
+  }
+  const agency: AgencySettingsData = { ...DEFAULT_AGENCY_SETTINGS, ...liveAgency };
+
   // -------------------------------------------------------------
   // 1. BANDEAU SUPÉRIEUR MIDNIGHT & EN-TÊTE OFFICIEL
   // -------------------------------------------------------------
@@ -189,15 +205,15 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
 
   // Nom de Marque et Calligraphie Arabe
   doc.setFont("Amiri", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(255, 255, 255);
-  doc.text("Rahalat Bladna", 30, 14);
+  doc.text(agency.companyName || "Rahalat Bladna", 30, 14);
 
   // Séparateur et Calligraphie Arabe (formatée sans bug)
-  doc.setFontSize(14);
+  doc.setFontSize(13);
   doc.setTextColor(...COLOR_CYAN);
   const arabicBrand = formatArabic("رحلات بلادنا");
-  doc.text(`•  ${arabicBrand}`, 72, 14);
+  doc.text(`•  ${arabicBrand}`, 76, 14);
 
   // Slogan & Mention de l'Émetteur
   doc.setFont("Amiri", "bold");
@@ -208,12 +224,22 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
-  doc.text("Émetteur : MOHAMMED AMINE CHAIBAR • Régime de l'Auto-Entrepreneur (Loi 114-13)", 30, 26);
+  const legalIdentifiers = [
+    agency.licenseNumber ? `Agrément N° ${agency.licenseNumber}` : null,
+    agency.ice ? `ICE : ${agency.ice}` : null,
+    agency.rc ? `RC : ${agency.rc}` : null,
+    agency.taxId ? `IF : ${agency.taxId}` : null,
+  ].filter(Boolean).join("  •  ");
+  const emitterText = legalIdentifiers
+    ? `Émetteur : ${agency.companyName}  •  ${legalIdentifiers}`
+    : `Émetteur : ${agency.companyName}  •  Régime de l'Auto-Entrepreneur (Loi 114-13)`;
+  doc.text(emitterText, 30, 26);
 
   // Coordonnées de Contact Réelles
   doc.setFontSize(7.5);
   doc.setTextColor(203, 213, 225);
-  doc.text("Tél / WhatsApp : +212 603-660658  |  Email : contact@rahalatbladna.ma  |  Rabat, Maroc", 30, 31);
+  const contactAddress = agency.address || `${agency.city}, Maroc`;
+  doc.text(`Tél / WhatsApp : ${agency.whatsappPhone}  |  Email : ${agency.email}  |  ${contactAddress}`, 30, 31);
 
   // Badge Document (Cadre blanc à droite)
   const badgeWidth = 62;
@@ -389,11 +415,11 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   const finalY = (doc as any).lastAutoTable.finalY + 5;
 
   // -------------------------------------------------------------
-  // 4. RÉCAPITULATIF FINANCIER & COORDONNÉES BANCAIRES CIH BANK
+  // 4. RÉCAPITULATIF FINANCIER & COORDONNÉES BANCAIRES
   // -------------------------------------------------------------
   const sectionHeight = 46;
 
-  // Coordonnées bancaires réelles CIH Bank (Gauche)
+  // Coordonnées bancaires réelles de l'agence (Gauche)
   const bankBoxWidth = 104;
   doc.setFillColor(...COLOR_LIGHT_BG);
   doc.roundedRect(14, finalY, bankBoxWidth, sectionHeight, 3, 3, "F");
@@ -403,23 +429,26 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFont("Amiri", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...COLOR_MIDNIGHT);
-  doc.text("COORDONNÉES BANCAIRES OFFICIELLES (CIH BANK)", 18, finalY + 6);
+  const bankHeader = `COORDONNÉES BANCAIRES OFFICIELLES (${(agency.bankName || "VIREMENT").toUpperCase()})`;
+  doc.text(bankHeader, 18, finalY + 6);
 
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...COLOR_SLATE);
-  doc.text("• Banque : CIH Bank  |  Agence : 081", 18, finalY + 11.5);
-  doc.text("• Bénéficiaire : MOHAMMED AMINE CHAIBAR", 18, finalY + 16.5);
+  doc.text(`• Établissement : ${agency.bankName || "Attijariwafa / CIH Bank"}`, 18, finalY + 11.5);
+  doc.text(`• Bénéficiaire : ${agency.companyName}`, 18, finalY + 16.5);
 
   doc.setFont("Amiri", "bold");
   doc.setTextColor(...COLOR_MIDNIGHT);
-  doc.text("• RIB (24 chiffres) : 230 810 6784594211008100 80", 18, finalY + 22);
+  const rawRib = (agency.bankRib || "230810678459421100810080").replace(/\s+/g, "");
+  const formattedRib = rawRib.replace(/(\d{3})(\d{3})(\d{16})(\d{2})/, "$1 $2 $3 $4") || rawRib;
+  doc.text(`• RIB (24 chiffres) : ${formattedRib}`, 18, finalY + 22);
 
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...COLOR_SLATE);
-  doc.text("• IBAN : MA64 2308 1067 8459 4211 0081 0080  |  Code SWIFT : CIHMMAMC", 18, finalY + 27.5);
-  doc.text("• Règlement par virement bancaire, versement CIH Express ou Cash Plus.", 18, finalY + 33);
+  doc.text(`• IBAN : MA64 ${rawRib}`, 18, finalY + 27.5);
+  doc.text("• Règlement des acomptes par virement bancaire, versement ou agence.", 18, finalY + 33);
 
   doc.setFont("Amiri", "bold");
   doc.setTextColor(...COLOR_DARK_CYAN);
@@ -574,24 +603,28 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setTextColor(226, 232, 240);
 
   if (isPartner) {
-    // Cartouche B2B / Partenaires & Contrôles Routiers TIST / Gendarmerie
-    doc.text(
-      "Mohammed Amine CHAIBAR — Guide de Tourisme & Auto-Entrepreneur | Identifiant Fiscal : 73169307 | Taxe Pro : 26311818 | N° Registre National AE : 004003997000036 | CNI : AA44480",
-      pageWidth / 2,
-      pageHeight - 6.5,
-      { align: "center" }
-    );
+    // Cartouche B2B / Partenaires & Contrôles Routiers
+    const b2bLegal = [
+      agency.companyName,
+      agency.licenseNumber ? `Agrément : ${agency.licenseNumber}` : null,
+      agency.ice ? `ICE : ${agency.ice}` : null,
+      agency.rc ? `RC : ${agency.rc}` : null,
+      agency.taxId ? `IF : ${agency.taxId}` : null,
+      agency.city || "Maroc",
+    ].filter(Boolean).join("  |  ");
+
+    doc.text(b2bLegal, pageWidth / 2, pageHeight - 6.5, { align: "center" });
     doc.setFontSize(5.8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      "Convention de prestation de services & transport touristique • Document commercial émis par voie électronique avec valeur juridique probante.",
+      `Convention B2B & transport touristique • Tél / WhatsApp : ${agency.whatsappPhone} | Email : ${agency.email} • Document commercial officiel.`,
       pageWidth / 2,
       pageHeight - 3,
       { align: "center" }
     );
   } else {
     // Pied de page épuré orienté Client Voyageur
-    const brandText = `Rahalat Bladna (${formatArabic("رحلات بلادنا")}) — Voyages Organisés & Découverte du Maroc • Document émis par voie électronique avec valeur juridique probante.`;
+    const brandText = `${agency.companyName} (${formatArabic("رحلات بلادنا")}) — Voyages Organisés & Découverte du Maroc • Document émis par voie électronique avec valeur juridique probante.`;
     doc.text(
       brandText,
       pageWidth / 2,
@@ -600,8 +633,9 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     );
     doc.setFontSize(5.8);
     doc.setTextColor(148, 163, 184);
+    const locFooter = agency.address || `${agency.city}, Maroc`;
     doc.text(
-      "Service Client & Assistance Départs : +212 603-660658 | Email : contact@rahalatbladna.ma | Rabat, Maroc",
+      `Service Client & Assistance Départs : ${agency.whatsappPhone} | Email : ${agency.email} | ${locFooter}`,
       pageWidth / 2,
       pageHeight - 3,
       { align: "center" }

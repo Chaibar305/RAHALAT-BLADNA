@@ -6,11 +6,13 @@ import {
   Sparkles, Calendar, ShieldCheck, HeartHandshake, 
   Car, Map, Hotel, ArrowRight, CheckCircle2, MessageCircle 
 } from "lucide-react";
+import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
 
 export function TailorMadeSection() {
   const locale = useLocale();
   const t = useTranslations("home");
   const [showModal, setShowModal] = useState(false);
+  const { whatsappUrl } = useAgencySettings();
 
   const perks = [
     {
@@ -76,7 +78,7 @@ export function TailorMadeSection() {
             {/* Direct CTA */}
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <a
-                href="https://wa.me/212681024758?text=Bonjour%20Rahalat%20Bladna,%20je%20souhaite%20un%20devis%20pour%20un%20voyage%20sur%20mesure."
+                href={whatsappUrl("Bonjour Rahalat Bladna, je souhaite un devis pour un voyage sur mesure.")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-tp-cyan hover:bg-tp-cyan-hover text-white font-black text-xs sm:text-sm px-6 py-3.5 rounded-control shadow-tp-cyan hover:shadow-lg transition-all active:scale-95"
