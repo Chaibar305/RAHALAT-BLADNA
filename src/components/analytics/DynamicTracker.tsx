@@ -70,13 +70,21 @@ export function DynamicTracker({ config }: DynamicTrackerProps) {
   }, [config.customHeadScripts, config.customBodyScripts]);
 
   const googleTagId = config.googleAnalyticsId || config.googleAdsId;
+  const hasMetaInCustomHead = Boolean(
+    config.customHeadScripts &&
+    (config.customHeadScripts.includes("fbevents.js") || config.customHeadScripts.includes("fbq("))
+  );
+  const hasGoogleInCustomHead = Boolean(
+    config.customHeadScripts &&
+    (config.customHeadScripts.includes("googletagmanager.com/gtag/js") || config.customHeadScripts.includes("gtag('config'"))
+  );
 
   return (
     <>
       {/* ==================================================== */}
       {/* 1. GOOGLE ANALYTICS 4 & GOOGLE ADS (gtag.js)        */}
       {/* ==================================================== */}
-      {googleTagId && (
+      {googleTagId && !hasGoogleInCustomHead && (
         <>
           <Script
             id="google-gtag-base"
@@ -102,7 +110,7 @@ export function DynamicTracker({ config }: DynamicTrackerProps) {
       {/* ==================================================== */}
       {/* 2. META / FACEBOOK PIXEL (fbq)                      */}
       {/* ==================================================== */}
-      {config.facebookPixelId && (
+      {config.facebookPixelId && !hasMetaInCustomHead && (
         <Script
           id="meta-pixel-init"
           strategy="afterInteractive"
