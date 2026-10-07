@@ -7,11 +7,8 @@ import path from "path";
 // Moteur de mise en forme arabe cursif (Shaping) et réordonnancement bidirectionnel (BiDi UAX #9)
 import { ArabicShaper } from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
-import { 
-  getAgencySettingsAction, 
-  AgencySettingsData, 
-  DEFAULT_AGENCY_SETTINGS 
-} from "@/actions/agency.actions";
+import { getAgencySettingsAction } from "@/actions/agency.actions";
+import { AgencySettingsData, DEFAULT_AGENCY_SETTINGS } from "@/lib/agency";
 
 const bidi = bidiFactory();
 

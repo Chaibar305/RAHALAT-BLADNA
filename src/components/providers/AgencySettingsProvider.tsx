@@ -5,7 +5,7 @@ import {
   AgencySettingsData,
   DEFAULT_AGENCY_SETTINGS,
   cleanMoroccanPhoneForWhatsApp,
-} from "@/actions/agency.actions";
+} from "@/lib/agency";
 
 interface AgencySettingsContextValue {
   settings: AgencySettingsData;

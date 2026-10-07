@@ -6,7 +6,8 @@ import {
   Building2, Save, CheckCircle2, AlertCircle, 
   CreditCard, PhoneCall, ShieldCheck, FileText, Globe 
 } from "lucide-react";
-import { updateAgencySettingsAction, AgencySettingsData } from "@/actions/agency.actions";
+import { updateAgencySettingsAction } from "@/actions/agency.actions";
+import { AgencySettingsData } from "@/lib/agency";
 import { useRouter } from "next/navigation";
 
 interface AgencySettingsManagerProps {
