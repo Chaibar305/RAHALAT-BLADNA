@@ -1,8 +1,9 @@
 import crypto from "crypto";
 import { headers, cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
 const GRAPH_API_VERSION = "v26.0";
-const DEFAULT_PIXEL_ID = "1118260296106847";
+const DEFAULT_PIXEL_ID = "2966070783725630";
 const DEFAULT_ACCESS_TOKEN =
   "EAAZAxkCMvS0sBSgQw5g0sjjmmxzZCW89XZBjJxq7S0GxSlFfxpIRGEMo8W3bxY4ZCLgT6BNZAxD2cZAPTEcV80FNgkrxfNNQ3W4AwJWbK2ZCZBXTh2fTbxisJfmRdTplToAIu5wpn4U53qlYpVgZCOAkirS4hZBpIcZB02ZAz6Qs3ZBQ4ZAxLDiXKom4Wtcow0L7WhiwZDZD";
 const DEFAULT_TEST_EVENT_CODE = "TEST70664";
@@ -169,6 +170,29 @@ function getClientRequestContext() {
 }
 
 /**
+ * Récupère dynamiquement l'ID du Pixel Meta configuré en base de données dans GeneralSettings.
+ * Permet un changement 100% automatique depuis le panneau d'administration sans redémarrer ni modifier de code.
+ */
+export async function getEffectiveMetaPixelId(): Promise<string> {
+  try {
+    const db = prisma as any;
+    const settings = await db.generalSettings.findUnique({
+      where: { id: "default" },
+      select: { facebookPixelId: true },
+    });
+    if (settings?.facebookPixelId && settings.facebookPixelId.trim()) {
+      return settings.facebookPixelId.trim();
+    }
+  } catch {
+    // Fallback silencieux en cas d'appel hors contexte DB
+  }
+
+  return (
+    process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || DEFAULT_PIXEL_ID
+  ).trim();
+}
+
+/**
  * Moteur Serveur Meta Conversions API (CAPI).
  * Envoie un événement structuré à Meta Graph API v26.0 avec hachage SHA-256 et déduplication.
  */
@@ -178,9 +202,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   fbTraceId?: string;
   error?: any;
 }> {
-  const pixelId = (
-    process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || DEFAULT_PIXEL_ID
-  ).trim();
+  const pixelId = (await getEffectiveMetaPixelId()).trim();
 
   const accessToken = (
     process.env.FACEBOOK_ACCESS_TOKEN || DEFAULT_ACCESS_TOKEN

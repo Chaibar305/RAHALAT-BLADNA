@@ -80,7 +80,7 @@ export async function getGeneralSettingsAction() {
       settings = await db.generalSettings.create({
         data: {
           id: "default",
-          facebookPixelId: "1118260296106847", // Pixel historique actif
+          facebookPixelId: "2966070783725630", // Pixel actif par défaut
           conversionEventType: "lead",
           conversionTriggerType: "on_submit",
           googleSheetTabName: "Réservations",
@@ -109,7 +109,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
         googleAnalyticsId: null,
         googleAdsId: null,
         googleAdsConversionLabel: null,
-        facebookPixelId: "1118260296106847",
+        facebookPixelId: "2966070783725630",
         tiktokPixelId: null,
         snapchatPixelId: null,
         customHeadScripts: null,
@@ -123,7 +123,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
       googleAnalyticsId: settings.googleAnalyticsId,
       googleAdsId: settings.googleAdsId,
       googleAdsConversionLabel: settings.googleAdsConversionLabel,
-      facebookPixelId: settings.facebookPixelId || "1118260296106847",
+      facebookPixelId: settings.facebookPixelId || "2966070783725630",
       tiktokPixelId: settings.tiktokPixelId,
       snapchatPixelId: settings.snapchatPixelId,
       customHeadScripts: settings.customHeadScripts,
@@ -136,7 +136,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
       googleAnalyticsId: null,
       googleAdsId: null,
       googleAdsConversionLabel: null,
-      facebookPixelId: "1118260296106847",
+      facebookPixelId: "2966070783725630",
       tiktokPixelId: null,
       snapchatPixelId: null,
       customHeadScripts: null,
@@ -203,7 +203,9 @@ export async function updateTrackingSettingsAction(input: TrackingSettingsInput)
 
     try {
       revalidatePath("/admin/settings");
-      revalidatePath("/");
+      revalidatePath("/admin/analytics");
+      revalidatePath("/[locale]/admin/analytics");
+      revalidatePath("/", "layout");
     } catch {}
 
     return {
