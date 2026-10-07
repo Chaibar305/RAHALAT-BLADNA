@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useLocale } from 'next-intl';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 
@@ -75,7 +75,7 @@ export function TripReviewsCarousel() {
   const locale = useLocale();
   const isAr = locale === 'ar';
 
-  const scroll = (direction: 'left' | 'right') => {
+  const scroll = useCallback((direction: 'left' | 'right') => {
     if (!scrollRef.current) return;
     const container = scrollRef.current;
     const cardWidth = 360;
@@ -97,7 +97,7 @@ export function TripReviewsCarousel() {
         container.scrollBy({ left: -cardWidth, behavior: 'smooth' });
       }
     }
-  };
+  }, [isAr]);
 
   // Rotation automatique toutes les 3.5 secondes avec pause au survol et au toucher
   useEffect(() => {
@@ -107,7 +107,7 @@ export function TripReviewsCarousel() {
     }, 3500);
 
     return () => clearInterval(interval);
-  }, [isPaused, isAr]);
+  }, [isPaused, scroll]);
 
   return (
     <section className="py-12 my-6 border-t border-slate-200/80 dark:border-slate-800/80">

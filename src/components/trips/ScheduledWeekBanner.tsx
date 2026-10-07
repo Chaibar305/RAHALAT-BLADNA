@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
 import { 
@@ -47,12 +47,13 @@ export function ScheduledWeekBanner({
   const [isDismissed, setIsDismissed] = useState(false);
 
   // Liste de tous les circuits planifiés cette semaine
-  const allScheduledTrips: ScheduledTripInfo[] = scheduledTrips && scheduledTrips.length > 0
-    ? scheduledTrips
-    : (scheduledTrip ? [scheduledTrip] : []);
-
   // Filtrer les circuits programmés qui ne sont pas le circuit courant
-  const otherScheduledTrips = allScheduledTrips.filter((t) => t.slug !== currentTripSlug);
+  const otherScheduledTrips = useMemo(() => {
+    const list: ScheduledTripInfo[] = scheduledTrips && scheduledTrips.length > 0
+      ? scheduledTrips
+      : (scheduledTrip ? [scheduledTrip] : []);
+    return list.filter((t) => t.slug !== currentTripSlug);
+  }, [scheduledTrips, scheduledTrip, currentTripSlug]);
 
   useEffect(() => {
     // Vérifier si l'utilisateur a masqué la bannière d'alerte pour cette session
@@ -62,7 +63,7 @@ export function ScheduledWeekBanner({
         setIsDismissed(true);
       }
     }
-  }, [otherScheduledTrips.length]);
+  }, [otherScheduledTrips]);
 
   const handleDismiss = () => {
     setIsDismissed(true);

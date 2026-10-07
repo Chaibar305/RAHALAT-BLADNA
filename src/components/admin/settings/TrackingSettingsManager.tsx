@@ -413,7 +413,7 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     <span className="text-xl">📊</span>
                     <div>
                       <h3 className="font-black text-sm text-slate-900 dark:text-white">Google Analytics 4 (GA4)</h3>
-                      <p className="text-[11px] text-slate-500">Flux Web & Mesure d'audience</p>
+                      <p className="text-[11px] text-slate-500">Flux Web &amp; Mesure d&apos;audience</p>
                     </div>
                   </div>
                   <span
@@ -756,7 +756,7 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Présent dans l'URL du fichier : https://docs.google.com/spreadsheets/d/<strong>[ID_ICI]</strong>/edit
+                    Présent dans l&apos;URL du fichier : https://docs.google.com/spreadsheets/d/<strong>[ID_ICI]</strong>/edit
                   </p>
                 </div>
 
@@ -772,7 +772,7 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Nom de l'onglet en bas de votre Google Sheet (par défaut : Réservations).
+                    Nom de l&apos;onglet en bas de votre Google Sheet (par défaut : Réservations).
                   </p>
                 </div>
               </div>
@@ -813,8 +813,8 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     </label>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       Téléchargez le fichier JSON de clé depuis la console Google Cloud (IAM &gt; Comptes de service),
-                      puis partagez votre feuille Google Sheet avec l'adresse <code>client_email</code> en tant
-                      qu'<strong>Éditeur</strong>.
+                      puis partagez votre feuille Google Sheet avec l&apos;adresse <code>client_email</code> en tant
+                      qu&apos;<strong>Éditeur</strong>.
                     </p>
                     <textarea
                       rows={6}
