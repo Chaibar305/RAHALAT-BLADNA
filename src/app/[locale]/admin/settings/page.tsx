@@ -35,7 +35,7 @@ export default async function AdminSettingsPage({
     generalSettings = await db.generalSettings.create({
       data: {
         id: "default",
-        facebookPixelId: "1384107910546340",
+        facebookPixelId: "1118260296106847",
         conversionEventType: "lead",
         conversionTriggerType: "on_submit",
         googleSheetTabName: "Réservations",

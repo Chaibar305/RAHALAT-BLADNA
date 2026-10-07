@@ -10,7 +10,7 @@ import { BookingStatus, PaymentStatus, QuoteStatus, InvoiceStatus, PaymentType, 
 import { normalizeTrafficSource } from "@/lib/attribution";
 import { syncBookingToSheetsTask } from "@/actions/settings.actions";
 import { updateBookingAction as updateBookingActionImpl } from "./admin-bookings";
-import { sendMetaCapiEvent } from "@/lib/meta-capi";
+import { sendMetaCapiEvent, sendMetaCrmLeadEvent } from "@/lib/meta-capi";
 import { getInvoiceData } from "@/actions/invoice.actions";
 import { generateInvoicePdfBuffer } from "@/lib/pdf/generateInvoice";
 import { 
@@ -255,6 +255,26 @@ export async function createBookingAction(input: CreateBookingInput) {
       },
     }).catch((err) => {
       console.warn("⚠️ [createBookingAction] CAPI Lead non-bloquant :", err);
+    });
+
+    // Déclenchement spécifique Meta Conversion Leads CRM (action_source: system_generated)
+    sendMetaCrmLeadEvent({
+      eventName: "Lead",
+      eventId: `crm_${leadEventId}`,
+      email: userEmail || undefined,
+      phone: leadTraveler?.phone || undefined,
+      fullName: leadTraveler?.fullName,
+      city: data.pickupCity || undefined,
+      leadEventSource: "Rahalat Bladna CRM",
+      customData: {
+        currency: "MAD",
+        value: totalAmount,
+        content_name: trip.titleFr,
+        order_id: result.reference,
+        num_items: paxCount,
+      },
+    }).catch((err) => {
+      console.warn("⚠️ [createBookingAction] Meta CRM Lead non-bloquant :", err);
     });
 
     // Envoi automatique de l'email de confirmation au client avec le Reçu / Devis PDF

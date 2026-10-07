@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { CallStatus, BookingStatus, PaymentStatus } from '@prisma/client';
+import { sendMetaCrmLeadEvent } from '@/lib/meta-capi';
 
 export interface UpdateCallData {
   callStatus?: CallStatus | string;
@@ -110,6 +111,39 @@ export async function updateCallStatusAction(
           ...(data.pickupCity ? { pickupCity: data.pickupCity } : {}),
           ...(data.roomPreference ? { roomType: data.roomPreference } : {}),
         },
+      });
+    }
+
+    // Déclenchement Meta Conversions API (CRM Conversion Leads) lors d'un changement d'étape CRM
+    if (data.callStatus === CallStatus.CONFIRMED_PHONE || data.callStatus === CallStatus.DEPOSIT_RECEIVED) {
+      const isDeposit = data.callStatus === CallStatus.DEPOSIT_RECEIVED;
+      const customerEmail = updated.user?.email || null;
+      const customerPhone = existing.travelers?.[0]?.phone || updated.user?.phone || null;
+      const customerName = existing.travelers?.[0]?.fullName || updated.user?.name || null;
+      const eventAmount = isDeposit
+        ? Number(updated.depositPaid) || Number(updated.totalAmount) || 0
+        : Number(updated.totalAmount) || 0;
+
+      sendMetaCrmLeadEvent({
+        eventName: isDeposit ? "Purchase" : "Lead",
+        eventId: `crm_${isDeposit ? "deposit" : "confirmed"}_${updated.id}_${Date.now()}`,
+        email: customerEmail,
+        phone: customerPhone,
+        fullName: customerName,
+        city: updated.pickupCity || undefined,
+        leadEventSource: "Rahalat Bladna CRM",
+        customData: {
+          event_source: "crm",
+          lead_event_source: "Rahalat Bladna CRM",
+          booking_reference: updated.reference,
+          trip_id: updated.tripId,
+          trip_title: updated.trip?.titleFr,
+          currency: "MAD",
+          value: eventAmount,
+          crm_stage: isDeposit ? "Deposit Received" : "Phone Confirmed",
+        },
+      }).catch((err) => {
+        console.warn("⚠️ [updateCallStatusAction] Meta CRM Lead non-bloquant :", err);
       });
     }
 

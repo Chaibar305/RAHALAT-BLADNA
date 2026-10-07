@@ -80,7 +80,7 @@ export async function getGeneralSettingsAction() {
       settings = await db.generalSettings.create({
         data: {
           id: "default",
-          facebookPixelId: "1384107910546340", // Pixel historique actif
+          facebookPixelId: "1118260296106847", // Pixel historique actif
           conversionEventType: "lead",
           conversionTriggerType: "on_submit",
           googleSheetTabName: "Réservations",
@@ -109,7 +109,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
         googleAnalyticsId: null,
         googleAdsId: null,
         googleAdsConversionLabel: null,
-        facebookPixelId: "1384107910546340",
+        facebookPixelId: "1118260296106847",
         tiktokPixelId: null,
         snapchatPixelId: null,
         customHeadScripts: null,
@@ -123,7 +123,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
       googleAnalyticsId: settings.googleAnalyticsId,
       googleAdsId: settings.googleAdsId,
       googleAdsConversionLabel: settings.googleAdsConversionLabel,
-      facebookPixelId: settings.facebookPixelId || "1384107910546340",
+      facebookPixelId: settings.facebookPixelId || "1118260296106847",
       tiktokPixelId: settings.tiktokPixelId,
       snapchatPixelId: settings.snapchatPixelId,
       customHeadScripts: settings.customHeadScripts,
@@ -136,7 +136,7 @@ export async function getPublicTrackingConfigAction(): Promise<PublicTrackingCon
       googleAnalyticsId: null,
       googleAdsId: null,
       googleAdsConversionLabel: null,
-      facebookPixelId: "1384107910546340",
+      facebookPixelId: "1118260296106847",
       tiktokPixelId: null,
       snapchatPixelId: null,
       customHeadScripts: null,

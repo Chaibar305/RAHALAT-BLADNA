@@ -38,8 +38,8 @@ async function main() {
   const hashedEmail = hashSha256(testEmail);
   console.log(`- Email "${testEmail}" -> SHA-256: ${hashedEmail?.substring(0, 16)}...`);
 
-  // 2. Test d'envoi réel à Meta Graph API v19.0 avec le Test Event Code
-  console.log("\n2️⃣ Envoi réel d'un événement CAPI de test à Meta Graph API :");
+  // 2. Test d'envoi réel à Meta Graph API v26.0 avec le Test Event Code
+  console.log("\n2️⃣ Envoi réel d'un événement CAPI de test à Meta Graph API v26.0 :");
   const testEventId = `test_capi_${Date.now()}`;
 
   const res = await sendMetaCapiEvent({

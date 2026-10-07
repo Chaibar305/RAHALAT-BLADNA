@@ -1,11 +1,11 @@
 import crypto from "crypto";
 import { headers, cookies } from "next/headers";
 
-const GRAPH_API_VERSION = "v19.0";
-const DEFAULT_PIXEL_ID = "1384107910546340";
+const GRAPH_API_VERSION = "v26.0";
+const DEFAULT_PIXEL_ID = "1118260296106847";
 const DEFAULT_ACCESS_TOKEN =
-  "EAAZAxkCMvS0sBStiS0TBmw4TCzKTiNgsHowoCM9xFCPCND83w8A1E5MXhifr1zieryt5PaTS1wd7LEwK8Q3PLQjdV61JC7TN24yXCGqHtuNxUVZBY3I7oUSZCGKPxoPw6tpn7mbbUtV8SEzlZCEZAvZBVZCdZBv2cn7cFQcJr3jlq1ELhYO4gM0nlPH1Jbh5WgZDZD";
-const DEFAULT_TEST_EVENT_CODE = "TEST30022";
+  "EAAZAxkCMvS0sBSgQw5g0sjjmmxzZCW89XZBjJxq7S0GxSlFfxpIRGEMo8W3bxY4ZCLgT6BNZAxD2cZAPTEcV80FNgkrxfNNQ3W4AwJWbK2ZCZBXTh2fTbxisJfmRdTplToAIu5wpn4U53qlYpVgZCOAkirS4hZBpIcZB02ZAz6Qs3ZBQ4ZAxLDiXKom4Wtcow0L7WhiwZDZD";
+const DEFAULT_TEST_EVENT_CODE = "TEST70664";
 
 export interface MetaUserDataInput {
   email?: string | null;
@@ -15,6 +15,8 @@ export interface MetaUserDataInput {
   lastName?: string | null;
   city?: string | null;
   country?: string | null;
+  leadId?: number | string | null;
+  lead_id?: number | string | null;
   clientIpAddress?: string | null;
   clientUserAgent?: string | null;
   fbp?: string | null;
@@ -34,16 +36,37 @@ export interface MetaCustomDataInput {
   }>;
   num_items?: number;
   order_id?: string;
+  event_source?: "crm" | "website" | "app" | string;
+  lead_event_source?: string;
   [key: string]: any;
 }
 
 export interface MetaCapiEventPayload {
   eventName: "PageView" | "ViewContent" | "InitiateCheckout" | "Lead" | "Purchase" | string;
-  eventId: string;
+  eventId?: string;
   eventTime?: number;
   eventSourceUrl?: string;
+  actionSource?: "website" | "system_generated" | "app" | "physical_store" | string;
   userData?: MetaUserDataInput;
   customData?: MetaCustomDataInput;
+  testEventCode?: string;
+}
+
+export interface MetaCrmLeadEventInput {
+  eventName?: string; // Nom de l'étape clé CRM (ex: "Lead", "QualifiedLead", "DepositPaid", etc.)
+  eventTime?: number; // Timestamp UNIX en secondes
+  eventId?: string;
+  email?: string | null;
+  phone?: string | null;
+  leadId?: number | string | null;
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  city?: string | null;
+  country?: string | null;
+  leadEventSource?: string; // Nom du CRM (défaut: "Rahalat Bladna CRM")
+  customData?: Record<string, any>;
+  testEventCode?: string;
 }
 
 /**
@@ -87,6 +110,16 @@ export function normalizeFirstName(name: string | undefined | null): string | un
   const parts = name.trim().split(/\s+/);
   const first = parts[0];
   return first ? first.toLowerCase().trim() : undefined;
+}
+
+/**
+ * Extraction et normalisation du nom de famille (chaîne après le prénom, minuscules).
+ */
+export function normalizeLastName(name: string | undefined | null): string | undefined {
+  if (!name) return undefined;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 1) return undefined;
+  return parts.slice(1).join(" ").toLowerCase().trim();
 }
 
 /**
@@ -137,7 +170,7 @@ function getClientRequestContext() {
 
 /**
  * Moteur Serveur Meta Conversions API (CAPI).
- * Envoie un événement structuré à Meta Graph API v19.0 avec hachage SHA-256 et déduplication d'eventId.
+ * Envoie un événement structuré à Meta Graph API v26.0 avec hachage SHA-256 et déduplication.
  */
 export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<{
   success: boolean;
@@ -154,7 +187,9 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   ).trim();
 
   const testEventCode = (
-    process.env.FACEBOOK_TEST_EVENT_CODE || DEFAULT_TEST_EVENT_CODE
+    payload.testEventCode ||
+    process.env.FACEBOOK_TEST_EVENT_CODE ||
+    DEFAULT_TEST_EVENT_CODE
   )?.trim();
 
   if (!pixelId || !accessToken) {
@@ -169,6 +204,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   const rawPhone = payload.userData?.phone;
   const rawFullName = payload.userData?.fullName;
   const rawFirstName = payload.userData?.firstName || (rawFullName ? normalizeFirstName(rawFullName) : undefined);
+  const rawLastName = payload.userData?.lastName || (rawFullName ? normalizeLastName(rawFullName) : undefined);
   const rawCity = payload.userData?.city;
   const rawCountry = payload.userData?.country || "ma";
 
@@ -176,6 +212,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   const normalizedPhone = normalizeMoroccanPhone(rawPhone);
   const hashedPhone = hashSha256(normalizedPhone);
   const hashedFirstName = hashSha256(rawFirstName);
+  const hashedLastName = hashSha256(rawLastName);
   const hashedCity = hashSha256(normalizeCity(rawCity));
   const hashedCountry = hashSha256(rawCountry);
 
@@ -189,8 +226,16 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   if (hashedEmail) userDataFormatted.em = [hashedEmail];
   if (hashedPhone) userDataFormatted.ph = [hashedPhone];
   if (hashedFirstName) userDataFormatted.fn = [hashedFirstName];
+  if (hashedLastName) userDataFormatted.ln = [hashedLastName];
   if (hashedCity) userDataFormatted.ct = [hashedCity];
   if (hashedCountry) userDataFormatted.country = [hashedCountry];
+
+  // Support direct du lead_id Meta Ads (formulaire instantané Lead Ads)
+  const rawLeadId = payload.userData?.leadId ?? payload.userData?.lead_id;
+  if (rawLeadId !== undefined && rawLeadId !== null && rawLeadId !== "") {
+    const num = Number(rawLeadId);
+    userDataFormatted.lead_id = !isNaN(num) && num > 0 ? num : rawLeadId;
+  }
 
   if (finalIp) userDataFormatted.client_ip_address = finalIp;
   if (finalUserAgent) userDataFormatted.client_user_agent = finalUserAgent;
@@ -199,24 +244,31 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
 
   // 2. Construction de l'événement CAPI unifié
   const eventTime = payload.eventTime || Math.floor(Date.now() / 1000);
-  const eventSourceUrl =
-    payload.eventSourceUrl ||
-    process.env.NEXTAUTH_URL ||
-    process.env.AUTH_URL ||
-    "https://rahalatbladna.ma";
+  const actionSource = payload.actionSource || "website";
 
   const singleEventData: Record<string, any> = {
     event_name: payload.eventName,
     event_time: eventTime,
-    event_id: payload.eventId,
-    event_source_url: eventSourceUrl,
-    action_source: "website",
+    action_source: actionSource,
     user_data: userDataFormatted,
   };
 
+  if (payload.eventId) {
+    singleEventData.event_id = payload.eventId;
+  }
+
+  // Pour les événements web, l'URL de source est essentielle
+  if (actionSource === "website" || payload.eventSourceUrl) {
+    singleEventData.event_source_url =
+      payload.eventSourceUrl ||
+      process.env.NEXTAUTH_URL ||
+      process.env.AUTH_URL ||
+      "https://rahalatbladna.ma";
+  }
+
   if (payload.customData) {
     singleEventData.custom_data = {
-      currency: payload.customData.currency || "MAD",
+      ...(actionSource === "website" ? { currency: payload.customData.currency || "MAD" } : {}),
       ...payload.customData,
     };
   }
@@ -225,17 +277,18 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
     data: [singleEventData],
   };
 
-  // Code de test Meta Events Manager (si activé)
+  // Code de test Meta Events Manager (si configuré)
   if (testEventCode) {
     requestBody.test_event_code = testEventCode;
   }
 
   const endpoint = `https://graph.facebook.com/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
 
-  console.log(`📡 [Meta CAPI] Envoi événement "${payload.eventName}" (Event ID: ${payload.eventId})...`, {
+  console.log(`📡 [Meta CAPI] Envoi événement "${payload.eventName}" (Action: ${actionSource}, Event ID: ${payload.eventId || "n/a"})...`, {
     test_event_code: testEventCode || "désactivé",
     has_email: !!hashedEmail,
     has_phone: !!hashedPhone,
+    has_lead_id: !!userDataFormatted.lead_id,
     has_ip: !!finalIp,
   });
 
@@ -266,4 +319,57 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
     console.error("❌ [Meta CAPI] Exception réseau lors de l'appel :", err?.message || err);
     return { success: false, error: err?.message || err };
   }
+}
+
+/**
+ * Envoi d'un événement de prospect CRM vers Meta Conversions API (Conversion Leads Integration).
+ * Respecte rigoureusement la spécification Meta :
+ * {
+ *   "data": [
+ *     {
+ *       "action_source": "system_generated",
+ *       "custom_data": {
+ *         "event_source": "crm",
+ *         "lead_event_source": "Rahalat Bladna CRM"
+ *       },
+ *       "event_name": "Lead",
+ *       "event_time": 1673035686,
+ *       "user_data": {
+ *         "em": ["<sha256>"],
+ *         "ph": ["<sha256>"],
+ *         "lead_id": 1234567890123456
+ *       }
+ *     }
+ *   ],
+ *   "test_event_code": "TEST70664"
+ * }
+ */
+export async function sendMetaCrmLeadEvent(input: MetaCrmLeadEventInput): Promise<{
+  success: boolean;
+  eventsReceived?: number;
+  fbTraceId?: string;
+  error?: any;
+}> {
+  return sendMetaCapiEvent({
+    eventName: input.eventName || "Lead",
+    eventId: input.eventId || `crm_lead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    eventTime: input.eventTime || Math.floor(Date.now() / 1000),
+    actionSource: "system_generated",
+    userData: {
+      email: input.email,
+      phone: input.phone,
+      leadId: input.leadId,
+      fullName: input.fullName,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      city: input.city,
+      country: input.country,
+    },
+    customData: {
+      event_source: "crm",
+      lead_event_source: input.leadEventSource || "Rahalat Bladna CRM",
+      ...(input.customData || {}),
+    },
+    testEventCode: input.testEventCode,
+  });
 }

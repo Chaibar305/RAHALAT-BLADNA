@@ -4,7 +4,7 @@ import React, { useEffect, useRef, Suspense } from "react";
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 
-const DEFAULT_PIXEL_ID = "1384107910546340";
+const DEFAULT_PIXEL_ID = "1118260296106847";
 
 function PixelRouteTracker() {
   const pathname = usePathname();

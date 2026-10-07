@@ -58,7 +58,7 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
     googleAnalyticsId: initialSettings?.googleAnalyticsId || "",
     googleAdsId: initialSettings?.googleAdsId || "",
     googleAdsConversionLabel: initialSettings?.googleAdsConversionLabel || "",
-    facebookPixelId: initialSettings?.facebookPixelId || "1384107910546340",
+    facebookPixelId: initialSettings?.facebookPixelId || "1118260296106847",
     tiktokPixelId: initialSettings?.tiktokPixelId || "",
     snapchatPixelId: initialSettings?.snapchatPixelId || "",
 
@@ -332,7 +332,7 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     type="text"
                     value={formData.facebookPixelId}
                     onChange={(e) => setFormData({ ...formData, facebookPixelId: e.target.value })}
-                    placeholder="Ex: 1384107910546340"
+                    placeholder="Ex: 1118260296106847"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-xs focus:ring-2 focus:ring-purple-500 outline-none"
                   />
                 </div>
