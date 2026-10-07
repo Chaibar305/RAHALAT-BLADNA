@@ -29,6 +29,8 @@ interface TrackingSettingsData {
   googleAdsId?: string | null;
   googleAdsConversionLabel?: string | null;
   facebookPixelId?: string | null;
+  facebookAccessToken?: string | null;
+  facebookTestEventCode?: string | null;
   tiktokPixelId?: string | null;
   snapchatPixelId?: string | null;
   customHeadScripts?: string | null;
@@ -59,6 +61,8 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
     googleAdsId: initialSettings?.googleAdsId || "",
     googleAdsConversionLabel: initialSettings?.googleAdsConversionLabel || "",
     facebookPixelId: initialSettings?.facebookPixelId || "2966070783725630",
+    facebookAccessToken: initialSettings?.facebookAccessToken || "",
+    facebookTestEventCode: initialSettings?.facebookTestEventCode || "",
     tiktokPixelId: initialSettings?.tiktokPixelId || "",
     snapchatPixelId: initialSettings?.snapchatPixelId || "",
 
@@ -335,6 +339,35 @@ export function TrackingSettingsManager({ initialSettings }: TrackingSettingsMan
                     placeholder="Ex: 2966070783725630"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-xs focus:ring-2 focus:ring-purple-500 outline-none"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span>{isAr ? "رمز وصول CAPI (اختياري)" : "Jeton d&apos;accès CAPI (Optionnel)"}</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.facebookAccessToken}
+                      onChange={(e) => setFormData({ ...formData, facebookAccessToken: e.target.value })}
+                      placeholder="Ex: EAAZAxk..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-[11px] focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span>{isAr ? "كود اختبار الأحداث" : "Code d'Événement Test"}</span>
+                      <span className="text-[9px] text-slate-400 font-normal">Vide en production</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.facebookTestEventCode}
+                      onChange={(e) => setFormData({ ...formData, facebookTestEventCode: e.target.value })}
+                      placeholder="Ex: TEST70489"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-mono text-[11px] focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 

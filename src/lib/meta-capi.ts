@@ -170,26 +170,52 @@ function getClientRequestContext() {
 }
 
 /**
- * Récupère dynamiquement l'ID du Pixel Meta configuré en base de données dans GeneralSettings.
- * Permet un changement 100% automatique depuis le panneau d'administration sans redémarrer ni modifier de code.
+ * Récupère dynamiquement la configuration Meta CAPI enregistrée en base de données dans GeneralSettings.
+ * Permet de modifier le Pixel ID, le Token d'accès et le Code de test directement depuis /admin/settings sans toucher aux fichiers .env ni redémarrer le serveur.
  */
-export async function getEffectiveMetaPixelId(): Promise<string> {
+export async function getEffectiveMetaCapiConfig(): Promise<{
+  pixelId: string;
+  accessToken: string;
+  testEventCode?: string;
+}> {
+  let dbPixelId: string | null = null;
+  let dbAccessToken: string | null = null;
+  let dbTestEventCode: string | null = null;
+
   try {
     const db = prisma as any;
     const settings = await db.generalSettings.findUnique({
       where: { id: "default" },
-      select: { facebookPixelId: true },
+      select: {
+        facebookPixelId: true,
+        facebookAccessToken: true,
+        facebookTestEventCode: true,
+      },
     });
-    if (settings?.facebookPixelId && settings.facebookPixelId.trim()) {
-      return settings.facebookPixelId.trim();
-    }
+    dbPixelId = settings?.facebookPixelId?.trim() || null;
+    dbAccessToken = settings?.facebookAccessToken?.trim() || null;
+    dbTestEventCode = settings?.facebookTestEventCode?.trim() || null;
   } catch {
     // Fallback silencieux en cas d'appel hors contexte DB
   }
 
-  return (
-    process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || DEFAULT_PIXEL_ID
-  ).trim();
+  const pixelId = dbPixelId || process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || DEFAULT_PIXEL_ID;
+  const accessToken = dbAccessToken || process.env.FACEBOOK_ACCESS_TOKEN || DEFAULT_ACCESS_TOKEN;
+  const testEventCode = dbTestEventCode !== null ? dbTestEventCode : (process.env.FACEBOOK_TEST_EVENT_CODE || DEFAULT_TEST_EVENT_CODE);
+
+  return {
+    pixelId: pixelId.trim(),
+    accessToken: accessToken.trim(),
+    testEventCode: testEventCode ? testEventCode.trim() : undefined,
+  };
+}
+
+/**
+ * Récupère dynamiquement l'ID du Pixel Meta actif.
+ */
+export async function getEffectiveMetaPixelId(): Promise<string> {
+  const config = await getEffectiveMetaCapiConfig();
+  return config.pixelId;
 }
 
 /**
@@ -202,17 +228,10 @@ export async function sendMetaCapiEvent(payload: MetaCapiEventPayload): Promise<
   fbTraceId?: string;
   error?: any;
 }> {
-  const pixelId = (await getEffectiveMetaPixelId()).trim();
-
-  const accessToken = (
-    process.env.FACEBOOK_ACCESS_TOKEN || DEFAULT_ACCESS_TOKEN
-  ).trim();
-
-  const testEventCode = (
-    payload.testEventCode ||
-    process.env.FACEBOOK_TEST_EVENT_CODE ||
-    DEFAULT_TEST_EVENT_CODE
-  )?.trim();
+  const metaConfig = await getEffectiveMetaCapiConfig();
+  const pixelId = metaConfig.pixelId;
+  const accessToken = metaConfig.accessToken;
+  const testEventCode = (payload.testEventCode || metaConfig.testEventCode)?.trim();
 
   if (!pixelId || !accessToken) {
     console.warn("⚠️ [Meta CAPI] Configuration manquante (PIXEL_ID ou ACCESS_TOKEN non défini).");

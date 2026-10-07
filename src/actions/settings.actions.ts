@@ -14,6 +14,8 @@ export interface GeneralSettings {
   googleAdsId: string | null;
   googleAdsConversionLabel: string | null;
   facebookPixelId: string | null;
+  facebookAccessToken: string | null;
+  facebookTestEventCode: string | null;
   tiktokPixelId: string | null;
   snapchatPixelId: string | null;
   customHeadScripts: string | null;
@@ -35,6 +37,8 @@ export interface TrackingSettingsInput {
   googleAdsId?: string | null;
   googleAdsConversionLabel?: string | null;
   facebookPixelId?: string | null;
+  facebookAccessToken?: string | null;
+  facebookTestEventCode?: string | null;
   tiktokPixelId?: string | null;
   snapchatPixelId?: string | null;
 
@@ -169,6 +173,8 @@ export async function updateTrackingSettingsAction(input: TrackingSettingsInput)
         googleAdsId: input.googleAdsId?.trim() || null,
         googleAdsConversionLabel: input.googleAdsConversionLabel?.trim() || null,
         facebookPixelId: input.facebookPixelId?.trim() || null,
+        facebookAccessToken: input.facebookAccessToken?.trim() || null,
+        facebookTestEventCode: input.facebookTestEventCode?.trim() || null,
         tiktokPixelId: input.tiktokPixelId?.trim() || null,
         snapchatPixelId: input.snapchatPixelId?.trim() || null,
         customHeadScripts: input.customHeadScripts?.trim() || null,
@@ -187,6 +193,8 @@ export async function updateTrackingSettingsAction(input: TrackingSettingsInput)
         googleAdsId: input.googleAdsId?.trim() || null,
         googleAdsConversionLabel: input.googleAdsConversionLabel?.trim() || null,
         facebookPixelId: input.facebookPixelId?.trim() || null,
+        facebookAccessToken: input.facebookAccessToken?.trim() || null,
+        facebookTestEventCode: input.facebookTestEventCode?.trim() || null,
         tiktokPixelId: input.tiktokPixelId?.trim() || null,
         snapchatPixelId: input.snapchatPixelId?.trim() || null,
         customHeadScripts: input.customHeadScripts?.trim() || null,

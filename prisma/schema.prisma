@@ -954,6 +954,8 @@ model GeneralSettings {
   googleAdsId               String?  @map("google_ads_id")               // Format AW-XXXXXX
   googleAdsConversionLabel  String?  @map("google_ads_conversion_label") // Label de conversion Google Ads
   facebookPixelId           String?  @map("facebook_pixel_id")           // Meta / Facebook Pixel ID
+  facebookAccessToken       String?  @map("facebook_access_token") @db.Text // Jeton d'accès Meta Conversions API (CAPI)
+  facebookTestEventCode     String?  @map("facebook_test_event_code")     // Code d'événement de test Meta (ex: TEST70489)
   tiktokPixelId             String?  @map("tiktok_pixel_id")             // TikTok Pixel ID
   snapchatPixelId           String?  @map("snapchat_pixel_id")           // Snap Pixel ID
 
