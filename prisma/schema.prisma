@@ -1004,5 +1004,43 @@ model AgencySettings {
   @@map("agency_settings")
 }
 
+// ====================================================
+// WEB ANALYTICS NATIVE & ÉVÉNEMENTS VISITEURS (VERCEL ANALYTICS)
+// ====================================================
+
+model PageView {
+  id           String   @id @default(cuid())
+  sessionId    String   @map("session_id") // Hash ou UUID de session anonyme
+  path         String   // Ex: /fr/trips/escapade-imlil-agafay-marrakech
+  referrer     String?  // Ex: https://m.facebook.com/
+  referrerHost String?  @map("referrer_host") // Domaine nettoyé (ex: facebook.com, instagram.com, google.com)
+  country      String?  @default("MA") // Code pays ISO (MA, FR, US...)
+  device       String?  @default("mobile") // "mobile" | "desktop" | "tablet"
+  os           String?  // "Android", "iOS", "Windows", "Mac OS", "Linux"
+  browser      String?  // "Chrome", "Safari", "Brave", "Firefox", "Edge"
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([path])
+  @@index([referrerHost])
+  @@index([sessionId])
+  @@index([country])
+  @@map("page_views")
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  sessionId String   @map("session_id")
+  eventName String   @map("event_name") // "whatsapp_click", "phone_call_click", "trip_booking_started", "receipt_uploaded"
+  path      String
+  metadata  Json?    // Ex: { tripSlug: "merzouga", tripPrice: 1450 }
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([eventName, createdAt])
+  @@index([path])
+  @@map("analytics_events")
+}
+
+
 
 

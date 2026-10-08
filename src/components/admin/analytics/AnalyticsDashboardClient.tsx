@@ -7,18 +7,26 @@ import {
   TrendingUp, DollarSign, Calendar, RefreshCw, 
   PhoneCall, Users, Ticket, ArrowUpRight, 
   Compass, Eye, CheckCircle2, Award, Zap,
-  BarChart3, PieChart, Sparkles, Filter, ShieldCheck, Share2, Settings
+  BarChart3, PieChart, Sparkles, Filter, ShieldCheck, Share2, Settings,
+  Globe
 } from "lucide-react";
-import { AnalyticsData, getAnalyticsMetrics } from "@/actions/analytics.actions";
+import { AnalyticsData, getAnalyticsMetrics, WebAnalyticsSummary } from "@/actions/analytics.actions";
+import { WebAnalyticsView } from "./WebAnalyticsView";
 
 interface AnalyticsDashboardClientProps {
   initialData: AnalyticsData;
+  initialWebData?: WebAnalyticsSummary;
   initialPeriod: "7d" | "30d" | "month" | "all";
 }
 
-export function AnalyticsDashboardClient({ initialData, initialPeriod }: AnalyticsDashboardClientProps) {
+export function AnalyticsDashboardClient({
+  initialData,
+  initialWebData,
+  initialPeriod,
+}: AnalyticsDashboardClientProps) {
   const locale = useLocale();
   const isAr = locale === "ar";
+  const [activeTab, setActiveTab] = useState<"web" | "business">("web");
   const [period, setPeriod] = useState<"7d" | "30d" | "month" | "all">(initialPeriod);
   const [data, setData] = useState<AnalyticsData>(initialData);
   const [isPending, startTransition] = useTransition();
@@ -71,7 +79,62 @@ export function AnalyticsDashboardClient({ initialData, initialPeriod }: Analyti
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
-      {/* Header & Filtres temporels */}
+      {/* Navigation Onglets Principaux */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => setActiveTab("web")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all ${
+              activeTab === "web"
+                ? "bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <Globe className="w-4 h-4 text-cyan-500" />
+            <span>{isAr ? "ترافيك الويب والزوار" : "Trafic Web & Visiteurs"}</span>
+            <span className="relative flex h-2 w-2 ml-1">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("business")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all ${
+              activeTab === "business"
+                ? "bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <DollarSign className="w-4 h-4 text-emerald-500" />
+            <span>{isAr ? "المبيعات والأداء التجاري" : "Ventes, Attribution & Équipe"}</span>
+          </button>
+        </div>
+
+        {/* Accès rapide aux réglages Pixels */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link
+            href={`/${locale}/admin/settings`}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            <span>{isAr ? "إعدادات البكسل" : "Configuration Pixels"}</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Contenu selon l'onglet actif */}
+      {activeTab === "web" ? (
+        initialWebData ? (
+          <WebAnalyticsView initialData={initialWebData} />
+        ) : (
+          <div className="p-12 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+            Initialisation des métriques web...
+          </div>
+        )
+      ) : (
+        <div className="space-y-6">
+          {/* Header & Filtres temporels */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
@@ -528,6 +591,8 @@ export function AnalyticsDashboardClient({ initialData, initialPeriod }: Analyti
           </div>
         </div>
       </div>
+        </div>
+      )}
     </div>
   );
 }

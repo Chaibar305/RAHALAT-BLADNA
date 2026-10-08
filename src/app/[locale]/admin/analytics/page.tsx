@@ -1,12 +1,12 @@
 import React from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getAnalyticsMetrics } from "@/actions/analytics.actions";
+import { getAnalyticsMetrics, getWebAnalyticsData } from "@/actions/analytics.actions";
 import { AnalyticsDashboardClient } from "@/components/admin/analytics/AnalyticsDashboardClient";
 
 export const metadata = {
   title: "Analytics & Performances | Admin Rahalat Bladna",
-  description: "Tableau de bord analytics, acquisition publicitaire et performances de l'équipe",
+  description: "Tableau de bord analytics, trafic web en direct et performances de l'équipe",
 };
 
 export default async function AdminAnalyticsPage({
@@ -37,11 +37,15 @@ export default async function AdminAnalyticsPage({
     redirect(`/${locale}/admin`);
   }
 
-  const initialData = await getAnalyticsMetrics("30d");
+  const [initialBusinessData, initialWebData] = await Promise.all([
+    getAnalyticsMetrics("30d"),
+    getWebAnalyticsData("7d"),
+  ]);
 
   return (
     <AnalyticsDashboardClient
-      initialData={initialData}
+      initialData={initialBusinessData}
+      initialWebData={initialWebData}
       initialPeriod="30d"
     />
   );

@@ -17,6 +17,7 @@ import {
   Instagram, Facebook, UserCheck, BookOpen
 } from "lucide-react";
 import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
+import { trackClientEvent } from "@/components/analytics/WebAnalyticsTracker";
 
 export function Header() {
   const pathname = usePathname();
@@ -134,6 +135,7 @@ export function Header() {
               href={`https://wa.me/${cleanPhone}`}
               target="_blank"
               rel="noreferrer"
+              onClick={() => trackClientEvent("whatsapp_click", { source: "navbar_desktop" })}
               className="inline-flex items-center gap-1.5 bg-tp-ok-bg/50 hover:bg-tp-ok-bg text-tp-ok-fg px-3 py-2 rounded-control text-xs font-extrabold border border-tp-ok-fg/20 transition-all shadow-tp-sm active:scale-95"
               aria-label="Contacter sur WhatsApp"
             >
@@ -337,6 +339,10 @@ export function Header() {
                 href={`https://wa.me/${cleanPhone}`}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  trackClientEvent("whatsapp_click", { source: "navbar_mobile" });
+                  setMobileMenuOpen(false);
+                }}
                 className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg transition active:scale-95"
               >
                 <MessageCircle className="w-4 h-4 fill-current" />

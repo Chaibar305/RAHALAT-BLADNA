@@ -356,3 +356,391 @@ export async function getAnalyticsMetrics(period: "7d" | "30d" | "month" | "all"
     recentTrend,
   };
 }
+
+// ====================================================
+// NATIVE WEB ANALYTICS & VISITOR EVENTS (VERCEL STYLE)
+// ====================================================
+
+export interface WebAnalyticsSummary {
+  period: "24h" | "7d" | "30d" | "all";
+  overview: {
+    uniqueVisitors: number;
+    totalPageViews: number;
+    bounceRate: number; // en %
+    liveVisitors: number; // 15 dernières minutes
+    avgViewsPerSession: number;
+  };
+  timeline: Array<{
+    date: string;
+    views: number;
+    visitors: number;
+  }>;
+  topPages: Array<{
+    path: string;
+    views: number;
+    percentage: number;
+  }>;
+  topReferrers: Array<{
+    host: string;
+    views: number;
+    percentage: number;
+  }>;
+  countries: Array<{
+    code: string;
+    name: string;
+    flag: string;
+    views: number;
+    percentage: number;
+  }>;
+  devices: Array<{
+    device: string;
+    views: number;
+    percentage: number;
+  }>;
+  osList: Array<{
+    name: string;
+    views: number;
+    percentage: number;
+  }>;
+  browsers: Array<{
+    name: string;
+    views: number;
+    percentage: number;
+  }>;
+  events: Array<{
+    eventName: string;
+    count: number;
+    lastTriggered: string;
+  }>;
+}
+
+const COUNTRY_LOOKUP: Record<string, { name: string; flag: string }> = {
+  MA: { name: "Maroc", flag: "🇲🇦" },
+  FR: { name: "France", flag: "🇫🇷" },
+  ES: { name: "Espagne", flag: "🇪🇸" },
+  BE: { name: "Belgique", flag: "🇧🇪" },
+  DE: { name: "Allemagne", flag: "🇩🇪" },
+  US: { name: "États-Unis", flag: "🇺🇸" },
+  GB: { name: "Royaume-Uni", flag: "🇬🇧" },
+  CA: { name: "Canada", flag: "🇨🇦" },
+  IT: { name: "Italie", flag: "🇮🇹" },
+  NL: { name: "Pays-Bas", flag: "🇳🇱" },
+  AE: { name: "Émirats Arabes Unis", flag: "🇦🇪" },
+  SA: { name: "Arabie Saoudite", flag: "🇸🇦" },
+  QA: { name: "Qatar", flag: "🇶🇦" },
+  CH: { name: "Suisse", flag: "🇨🇭" },
+  DZ: { name: "Algérie", flag: "🇩🇿" },
+  TN: { name: "Tunisie", flag: "🇹🇳" },
+};
+
+export async function getWebAnalyticsData(
+  period: "24h" | "7d" | "30d" | "all" = "7d"
+): Promise<WebAnalyticsSummary> {
+  const db = prisma as any;
+  const now = new Date();
+  let startDate = new Date();
+
+  if (period === "24h") {
+    startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  } else if (period === "7d") {
+    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (period === "30d") {
+    startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  } else {
+    startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+  }
+
+  // 1. Récupération des PageViews sur la période
+  const pageViews = await db.pageView.findMany({
+    where: {
+      createdAt: { gte: startDate },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // 2. Récupération des AnalyticsEvents sur la période
+  const events = await db.analyticsEvent.findMany({
+    where: {
+      createdAt: { gte: startDate },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Visiteurs actifs en direct (15 dernières minutes)
+  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+  const liveSessions = new Set(
+    pageViews.filter((p: any) => new Date(p.createdAt) >= fifteenMinutesAgo).map((p: any) => p.sessionId)
+  );
+
+  const totalPageViews = pageViews.length;
+  const sessionsMap = new Map<string, number>();
+
+  pageViews.forEach((pv: any) => {
+    sessionsMap.set(pv.sessionId, (sessionsMap.get(pv.sessionId) || 0) + 1);
+  });
+
+  const uniqueVisitors = sessionsMap.size;
+
+  // Calcul du taux de rebond (sessions avec 1 seule page vue)
+  let singlePageSessions = 0;
+  sessionsMap.forEach((count) => {
+    if (count === 1) singlePageSessions += 1;
+  });
+  const bounceRate = uniqueVisitors > 0 ? (singlePageSessions / uniqueVisitors) * 100 : 0;
+  const avgViewsPerSession = uniqueVisitors > 0 ? totalPageViews / uniqueVisitors : 0;
+
+  // 3. Construction de la Timeline chronologique
+  const timelineMap = new Map<string, { views: number; visitors: Set<string> }>();
+
+  if (period === "24h") {
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 60 * 60 * 1000);
+      const label = `${String(d.getHours()).padStart(2, "0")}:00`;
+      timelineMap.set(label, { views: 0, visitors: new Set() });
+    }
+    pageViews.forEach((pv: any) => {
+      const pvDate = new Date(pv.createdAt);
+      const label = `${String(pvDate.getHours()).padStart(2, "0")}:00`;
+      if (timelineMap.has(label)) {
+        const item = timelineMap.get(label)!;
+        item.views += 1;
+        item.visitors.add(pv.sessionId);
+      }
+    });
+  } else {
+    const daysCount = period === "7d" ? 7 : period === "30d" ? 30 : 60;
+    for (let i = daysCount - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const label = d.toLocaleDateString("fr-MA", { day: "2-digit", month: "short" });
+      timelineMap.set(label, { views: 0, visitors: new Set() });
+    }
+    pageViews.forEach((pv: any) => {
+      const pvDate = new Date(pv.createdAt);
+      const label = pvDate.toLocaleDateString("fr-MA", { day: "2-digit", month: "short" });
+      if (timelineMap.has(label)) {
+        const item = timelineMap.get(label)!;
+        item.views += 1;
+        item.visitors.add(pv.sessionId);
+      }
+    });
+  }
+
+  const timeline = Array.from(timelineMap.entries()).map(([date, val]) => ({
+    date,
+    views: val.views,
+    visitors: val.visitors.size,
+  }));
+
+  // 4. Top Pages
+  const pagesMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    pagesMap.set(pv.path, (pagesMap.get(pv.path) || 0) + 1);
+  });
+  const topPages = Array.from(pagesMap.entries())
+    .map(([path, views]) => ({
+      path,
+      views,
+      percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  // 5. Top Référents
+  const referrersMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    const host = pv.referrerHost || "Direct / Organique";
+    referrersMap.set(host, (referrersMap.get(host) || 0) + 1);
+  });
+  const topReferrers = Array.from(referrersMap.entries())
+    .map(([host, views]) => ({
+      host,
+      views,
+      percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  // 6. Pays
+  const countriesMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    const c = (pv.country || "MA").toUpperCase();
+    countriesMap.set(c, (countriesMap.get(c) || 0) + 1);
+  });
+  const countries = Array.from(countriesMap.entries())
+    .map(([code, views]) => {
+      const meta = COUNTRY_LOOKUP[code] || { name: code, flag: "🌍" };
+      return {
+        code,
+        name: meta.name,
+        flag: meta.flag,
+        views,
+        percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+      };
+    })
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 8);
+
+  // 7. Appareils
+  const devicesMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    const d = pv.device || "mobile";
+    devicesMap.set(d, (devicesMap.get(d) || 0) + 1);
+  });
+  const devices = Array.from(devicesMap.entries())
+    .map(([device, views]) => ({
+      device,
+      views,
+      percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+    }))
+    .sort((a, b) => b.views - a.views);
+
+  // 8. Systèmes d'exploitation
+  const osMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    const o = pv.os || "Autre";
+    osMap.set(o, (osMap.get(o) || 0) + 1);
+  });
+  const osList = Array.from(osMap.entries())
+    .map(([name, views]) => ({
+      name,
+      views,
+      percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 6);
+
+  // 9. Navigateurs
+  const browsersMap = new Map<string, number>();
+  pageViews.forEach((pv: any) => {
+    const b = pv.browser || "Autre";
+    browsersMap.set(b, (browsersMap.get(b) || 0) + 1);
+  });
+  const browsers = Array.from(browsersMap.entries())
+    .map(([name, views]) => ({
+      name,
+      views,
+      percentage: totalPageViews > 0 ? Math.round((views / totalPageViews) * 100) : 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 6);
+
+  // 10. Événements personnalisés
+  const eventsMap = new Map<string, { count: number; lastDate: Date }>();
+  events.forEach((ev: any) => {
+    const current = eventsMap.get(ev.eventName) || { count: 0, lastDate: new Date(ev.createdAt) };
+    current.count += 1;
+    if (new Date(ev.createdAt) > current.lastDate) {
+      current.lastDate = new Date(ev.createdAt);
+    }
+    eventsMap.set(ev.eventName, current);
+  });
+
+  const formattedEvents = Array.from(eventsMap.entries())
+    .map(([eventName, val]) => ({
+      eventName,
+      count: val.count,
+      lastTriggered: val.lastDate.toLocaleDateString("fr-MA", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    period,
+    overview: {
+      uniqueVisitors,
+      totalPageViews,
+      bounceRate: Number(bounceRate.toFixed(1)),
+      liveVisitors: liveSessions.size,
+      avgViewsPerSession: Number(avgViewsPerSession.toFixed(1)),
+    },
+    timeline,
+    topPages,
+    topReferrers,
+    countries,
+    devices,
+    osList,
+    browsers,
+    events: formattedEvents,
+  };
+}
+
+/**
+ * Action de génération d'un échantillon de données réalistes
+ * si la base de données est neuve afin d'illustrer le module en direct
+ */
+export async function seedAnalyticsDemoDataAction() {
+  const db = prisma as any;
+  const samplePaths = [
+    "/fr",
+    "/fr/trips",
+    "/fr/trips/escapade-merzouga-dunes-sahara",
+    "/fr/trips/ascension-jbel-toubkal-refuge",
+    "/fr/trips/moyen-atlas-lacs-foret-cedres",
+    "/fr/carrieres",
+    "/fr/blog",
+    "/ar",
+    "/ar/trips",
+  ];
+
+  const sampleReferrers = [
+    { ref: "https://m.facebook.com/", host: "facebook.com" },
+    { ref: "https://www.instagram.com/", host: "instagram.com" },
+    { ref: "https://www.google.com/search?q=voyage+organise+maroc", host: "google.com" },
+    { ref: "https://tiktok.com/", host: "tiktok.com" },
+    { ref: null, host: "Direct / Organique" },
+  ];
+
+  const sampleCountries = ["MA", "MA", "MA", "MA", "FR", "FR", "ES", "BE", "US"];
+  const sampleDevices = ["mobile", "mobile", "mobile", "desktop", "tablet"];
+  const sampleOS = ["Android", "Android", "iOS", "Windows", "macOS"];
+  const sampleBrowsers = ["Chrome", "Safari", "Samsung Internet", "Chrome", "Firefox"];
+
+  const viewsToCreate = [];
+  const eventsToCreate = [];
+  const now = Date.now();
+
+  for (let i = 0; i < 85; i++) {
+    const randomTime = new Date(now - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000));
+    const sessionId = "demo_session_" + (i % 25);
+    const ref = sampleReferrers[Math.floor(Math.random() * sampleReferrers.length)];
+
+    viewsToCreate.push({
+      sessionId,
+      path: samplePaths[Math.floor(Math.random() * samplePaths.length)],
+      referrer: ref.ref,
+      referrerHost: ref.host,
+      country: sampleCountries[Math.floor(Math.random() * sampleCountries.length)],
+      device: sampleDevices[Math.floor(Math.random() * sampleDevices.length)],
+      os: sampleOS[Math.floor(Math.random() * sampleOS.length)],
+      browser: sampleBrowsers[Math.floor(Math.random() * sampleBrowsers.length)],
+      createdAt: randomTime,
+    });
+
+    if (i % 3 === 0) {
+      const eventNames = ["whatsapp_click", "phone_call_click", "trip_booking_started"];
+      eventsToCreate.push({
+        sessionId,
+        eventName: eventNames[Math.floor(Math.random() * eventNames.length)],
+        path: samplePaths[Math.floor(Math.random() * samplePaths.length)],
+        metadata: { source: "demo_tracker" },
+        createdAt: randomTime,
+      });
+    }
+  }
+
+  for (const item of viewsToCreate) {
+    await db.pageView.create({ data: item });
+  }
+
+  for (const ev of eventsToCreate) {
+    await db.analyticsEvent.create({ data: ev });
+  }
+
+  return { success: true, count: viewsToCreate.length };
+}
+

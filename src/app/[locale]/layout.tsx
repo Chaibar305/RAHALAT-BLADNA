@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { FacebookPixel } from "@/components/analytics/FacebookPixel";
 import { AttributionTracker } from "@/components/analytics/AttributionTracker";
+import { WebAnalyticsTracker } from "@/components/analytics/WebAnalyticsTracker";
 import { DynamicTracker } from "@/components/analytics/DynamicTracker";
 import { getPublicTrackingConfigAction } from "@/actions/settings.actions";
 import { getPublicAgencySettingsAction } from "@/actions/agency.actions";
@@ -73,6 +74,7 @@ export default async function LocaleLayout({
       >
         <FacebookPixel />
         <AttributionTracker />
+        <WebAnalyticsTracker />
         <AuthProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem>

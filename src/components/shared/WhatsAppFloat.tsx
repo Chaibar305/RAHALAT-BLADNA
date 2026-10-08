@@ -5,6 +5,7 @@ import { Instagram, Facebook } from "lucide-react";
 import { useLocale } from "next-intl";
 import { usePathname } from "next/navigation";
 import { useAgencySettings } from "@/components/providers/AgencySettingsProvider";
+import { trackClientEvent } from "@/components/analytics/WebAnalyticsTracker";
 
 export function WhatsAppFloat() {
   const pathname = usePathname();
@@ -69,6 +70,7 @@ export function WhatsAppFloat() {
           href={dynamicWhatsAppUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => trackClientEvent("whatsapp_click", { source: "floating_button" })}
           className="relative flex items-center justify-center w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-tp-xl transition-transform duration-200 hover:scale-110 active:scale-95 focus:outline-none focus:ring-4 focus:ring-[#25D366]/40 border-2 border-white"
           aria-label="Contacter sur WhatsApp"
         >
