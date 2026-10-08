@@ -197,7 +197,8 @@ export async function createBookingAction(input: CreateBookingInput) {
     // 4. Transaction Prisma Atomique ($transaction)
     const result = await prisma.$transaction(async (tx) => {
       // Insertion de la réservation : STRICTEMENT PENDING_VERIFICATION et 0 DH comptabilisés tant que non validé par l'admin
-      const booking = await tx.booking.create({
+      const dbTx = tx as any;
+      const booking = await dbTx.booking.create({
         data: {
           reference: bookingRef,
           userId,

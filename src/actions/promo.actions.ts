@@ -1,7 +1,11 @@
 "use server";
 
+export type DiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
+export const DiscountType = {
+  PERCENTAGE: "PERCENTAGE" as const,
+  FIXED_AMOUNT: "FIXED_AMOUNT" as const,
+};
 import { prisma } from "@/lib/prisma";
-import { DiscountType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 // 1. Validation du code promo lors de la réservation par le voyageur
