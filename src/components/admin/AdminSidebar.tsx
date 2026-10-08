@@ -10,7 +10,7 @@ import {
   LayoutDashboard, FileText, Ticket, Compass, 
   CreditCard, Settings, LogOut, ExternalLink, 
   ShieldCheck, ChevronRight, Menu, X, Bell, User, Users, Building2, QrCode, UserCheck,
-  Briefcase, UserPlus, Newspaper, TrendingUp
+  Briefcase, UserPlus, Newspaper, TrendingUp, Tag
 } from "lucide-react";
 import { getAdminSidebarCountsAction } from "@/actions/sidebar.actions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -103,6 +103,13 @@ export function AdminSidebar() {
       icon: Compass,
       badge: null,
       visible: isSuperAdmin || hasPerm("EDIT_TRIPS", "canEditTrips") || teamRole === "ORGANIZER",
+    },
+    {
+      label: isAr ? "رموز التخفيض والعروض" : isEn ? "Promo Codes & Offers" : "Codes Promo & Offres",
+      href: `/${locale}/admin/promos`,
+      icon: Tag,
+      badge: "%",
+      visible: isSuperAdmin || hasPerm("EDIT_TRIPS", "canEditTrips") || teamRole === "ORGANIZER" || teamRole === "MEDIA_BUYER",
     },
     {
       label: isAr ? "العملاء والمسافرون" : isEn ? "Clients & Travelers" : "Clients & Voyageurs",

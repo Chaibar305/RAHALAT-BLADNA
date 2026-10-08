@@ -270,6 +270,7 @@ model Trip {
   staffAssignments    TripStaff[]
   partnerAssignments  TripPartner[]
   bookings            Booking[]
+  promoCodes          PromoCode[]
   fixedCosts          TripFixedCost[]
   variableCosts       TripVariableCostPerPerson[]
 
@@ -586,6 +587,12 @@ model Booking {
   pickupCity            String?         // Ex: Rabat, Casablanca, Kénitra
   pickupPoint           String?         // Ex: Gare Rabat Ville, Marjane Californie
   roomPreference        String?         // Ex: Chambre Double, Lits séparés, Single
+  // Traces du coupon promo appliqué
+  promoCodeId       String?
+  promoCode         PromoCode?    @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  appliedPromoCode  String?       // Sauvegarde textuelle du code utilisé (ex: "ATLAS15")
+  discountAmount    Float         @default(0) // Montant déduit en MAD
+  originalPrice     Float?        // Prix avant réduction
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -605,6 +612,49 @@ model Booking {
   @@index([confirmedByMemberId])
   @@index([callStatus])
   @@index([nextCallbackDate])
+  @@index([promoCodeId])
+}
+
+// ====================================================
+// CODES PROMO & COUPONS DE RÉDUCTION
+// ====================================================
+
+enum DiscountType {
+  PERCENTAGE   // Réduction en pourcentage (%)
+  FIXED_AMOUNT // Réduction en dirhams fixes (MAD)
+}
+
+model PromoCode {
+  id                String        @id @default(cuid())
+  code              String        @unique // Code en majuscules (ex: ATLAS15, ETE2026)
+  description       String?       // Note interne (ex: "Campagne influenceur Instagram")
+  
+  discountType      DiscountType  @default(PERCENTAGE)
+  discountValue     Float         // Ex: 10 (pour 10%) ou 150 (pour 150 MAD)
+  
+  // Règles de maîtrise et conditions
+  minBookingAmount  Float?        // Montant total minimum requis pour activer le code (en MAD)
+  maxDiscountLimit  Float?        // Plafond maximal de la remise si pourcentage (ex: max 300 MAD)
+  
+  maxUses           Int?          // Limite totale d'utilisations autorisées (null = illimité)
+  usedCount         Int           @default(0) // Compteur d'utilisations réelles
+  
+  startDate         DateTime      @default(now())
+  expiresAt         DateTime?     // Date d'expiration optionnelle
+  isActive          Boolean       @default(true) // Switch On/Off d'activation
+
+  // Ciblage optionnel (tous circuits ou circuit spécifique)
+  targetTripId      String?
+  targetTrip        Trip?         @relation(fields: [targetTripId], references: [id], onDelete: SetNull)
+
+  // Historique des réservations ayant utilisé ce code
+  bookings          Booking[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([code, isActive])
+  @@index([targetTripId])
 }
 
 model Traveler {

@@ -7,12 +7,13 @@ import {
   Calendar, Users, MapPin, BedDouble, 
   CreditCard, CheckCircle2, ShieldCheck, AlertCircle, Sparkles, 
   ArrowRight, Minus, Plus, Train, Bus, Clock, Check, FileText,
-  ChevronRight, ArrowLeft
+  ChevronRight, ArrowLeft, Tag
 } from "lucide-react";
 import { PickupPointDto, AddonDto, PassengerSubmission } from "@/types";
 import { formatMAD } from "@/lib/utils";
 import { InvoiceDownloadButton } from "@/components/invoices/InvoiceDownloadButton";
 import { createBookingAction } from "@/actions/booking.actions";
+import { validatePromoCode } from "@/actions/promo.actions";
 import { trackClientMetaEvent, generateMetaEventId } from "@/lib/meta-client";
 import { getStoredTrafficAttribution } from "@/lib/attribution";
 import { trackConversion } from "@/lib/tracking";
@@ -233,14 +234,27 @@ export function BookingCard({
     ? Number(selectedDateObj.priceOverride)
     : (baseTripPrice > 0 ? baseTripPrice : Number(selectedDateObj?.price || 0));
 
-  // Calcul financier dynamique
+  // Code Promo & Réduction
+  const [couponInput, setCouponInput] = useState("");
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<{
+    promoId: string;
+    code: string;
+    discountType: string;
+    discountValue: number;
+    discountAmount: number;
+    newTotal: number;
+  } | null>(null);
+
+  // Calcul financier dynamique (avec et sans coupon promo)
   const calculateTotal = () => {
-    let total = passengerCount * activeBasePrice;
+    let rawTotal = passengerCount * activeBasePrice;
     
     // Suppléments Single
     passengers.forEach((p) => {
       if (p.roomType === "SINGLE") {
-        total += singleSupplement;
+        rawTotal += singleSupplement;
       }
     });
 
@@ -248,18 +262,69 @@ export function BookingCard({
     Object.entries(selectedAddons).forEach(([addonId, qty]) => {
       const addon = addonsList.find((a) => a.id === addonId);
       if (addon && qty > 0) {
-        total += addon.price * qty;
+        rawTotal += addon.price * qty;
       }
     });
 
-    const depositTotal = passengerCount * depositPerPerson;
+    let discountAmount = 0;
+    let total = rawTotal;
+
+    if (appliedPromo) {
+      if (appliedPromo.discountType === "PERCENTAGE") {
+        discountAmount = Math.round((rawTotal * appliedPromo.discountValue) / 100);
+      } else {
+        discountAmount = Math.round(appliedPromo.discountValue);
+      }
+      discountAmount = Math.min(discountAmount, rawTotal);
+      total = Math.max(0, rawTotal - discountAmount);
+    }
+
+    const depositTotal = Math.min(passengerCount * depositPerPerson, total);
     const amountToPayNow = paymentOption === "DEPOSIT" ? depositTotal : total;
     const remainingBalance = Math.max(0, total - amountToPayNow);
 
-    return { total, depositTotal, amountToPayNow, remainingBalance };
+    return { total, rawTotal, discountAmount, depositTotal, amountToPayNow, remainingBalance };
   };
 
   const financials = calculateTotal();
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setIsValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await validatePromoCode({
+        code: couponInput,
+        tripId: tripId || "",
+        subtotal: financials.rawTotal,
+      });
+
+      if (!res.valid) {
+        setCouponError(res.error || (isRtl ? "رمز ترويجي غير صالح" : "Code promo non valide"));
+        setAppliedPromo(null);
+      } else {
+        setAppliedPromo({
+          promoId: res.promoId!,
+          code: res.code!,
+          discountType: res.discountType!,
+          discountValue: res.discountValue!,
+          discountAmount: res.discountAmount!,
+          newTotal: res.newTotal!,
+        });
+        setCouponError(null);
+      }
+    } catch {
+      setCouponError(isRtl ? "حدث خطأ أثناء فحص الرمز" : "Erreur lors de la vérification du code");
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedPromo(null);
+    setCouponInput("");
+    setCouponError(null);
+  };
 
   // Soumission de réservation finale
   const handleSubmit = (e: React.FormEvent) => {
@@ -333,6 +398,8 @@ export function BookingCard({
           pickupCity: resolvedPickupCity,
           pickupPoint: resolvedPickupPoint,
           roomPreference: resolvedRoomPreference,
+          promoCodeId: appliedPromo?.promoId || undefined,
+          promoCode: appliedPromo?.code || undefined,
         };
 
         const res = await createBookingAction(payload);
@@ -982,17 +1049,93 @@ export function BookingCard({
         )}
 
         {/* ========================================================================= */}
-        {/* E. BLOC RÉCAPITULATIF FINANCIER & CTA                                     */}
+        {/* E. ENCADRÉ CODE PROMO & RÉDUCTION                                         */}
+        {/* ========================================================================= */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-tp-cyan" />
+              <span>{isRtl ? "رمز ترويجي / كود التخفيض" : "Code promo ou réduction"}</span>
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder={isRtl ? "مثال: ATLAS10" : "Code promo (ex: ATLAS10)"}
+              value={couponInput}
+              onChange={(e) => {
+                setCouponInput(e.target.value.toUpperCase());
+                if (couponError) setCouponError(null);
+              }}
+              disabled={isValidatingCoupon || !!appliedPromo}
+              className="flex-1 px-3 py-2 text-xs uppercase font-mono font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            />
+            {appliedPromo ? (
+              <button
+                type="button"
+                onClick={handleRemoveCoupon}
+                className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl transition"
+              >
+                {isRtl ? "حذف" : "Retirer"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleApplyCoupon}
+                disabled={isValidatingCoupon || !couponInput.trim()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition disabled:opacity-50"
+              >
+                {isValidatingCoupon ? "..." : isRtl ? "تطبيق" : "Appliquer"}
+              </button>
+            )}
+          </div>
+
+          {couponError && (
+            <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+              {couponError}
+            </p>
+          )}
+
+          {appliedPromo && (
+            <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 p-2.5 rounded-xl font-medium">
+              <span className="flex items-center gap-1.5 font-bold">
+                <span>✓</span>
+                <span>{isRtl ? `تم تطبيق الرمز ${appliedPromo.code}` : `Code ${appliedPromo.code} appliqué`}</span>
+              </span>
+              <span className="font-mono font-black">
+                -{financials.discountAmount} MAD
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* F. BLOC RÉCAPITULATIF FINANCIER & CTA                                     */}
         {/* ========================================================================= */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-600 dark:text-slate-400 font-medium">
               {isRtl ? "المبلغ الإجمالي للرحلة :" : "Montant Total du Voyage :"}
             </span>
-            <span className="font-mono font-black text-sm text-slate-900 dark:text-white">
-              {financials.total.toLocaleString("fr-MA")} MAD
-            </span>
+            <div className="flex items-center gap-2">
+              {financials.discountAmount > 0 && (
+                <span className="line-through text-xs text-slate-400 font-mono">
+                  {financials.rawTotal.toLocaleString("fr-MA")} MAD
+                </span>
+              )}
+              <span className="font-mono font-black text-sm text-slate-900 dark:text-white">
+                {financials.total.toLocaleString("fr-MA")} MAD
+              </span>
+            </div>
           </div>
+
+          {financials.discountAmount > 0 && (
+            <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+              <span>{isRtl ? "خصم كود التخفيض :" : "Remise code promo :"}</span>
+              <span className="font-mono font-black">-{financials.discountAmount} MAD</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/80 dark:border-slate-800/80">
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">

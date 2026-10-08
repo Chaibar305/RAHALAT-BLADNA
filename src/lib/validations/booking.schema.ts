@@ -28,6 +28,9 @@ export const CreateBookingSchema = z.object({
   pickupCity: z.string().optional().nullable(),
   pickupPoint: z.string().optional().nullable(),
   roomPreference: z.string().optional().nullable(),
+  // Code Promo & Réduction
+  promoCodeId: z.string().optional().nullable(),
+  promoCode: z.string().optional().nullable(),
 });
 
 export type CreateBookingInput = z.infer<typeof CreateBookingSchema>;

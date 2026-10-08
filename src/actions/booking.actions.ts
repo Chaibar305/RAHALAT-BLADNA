@@ -103,7 +103,52 @@ export async function createBookingAction(input: CreateBookingInput) {
 
     // Calcul du montant total
     let totalAmount = paxCount * basePrice;
-    const depositAmount = paxCount * depositPerPax;
+    const originalPrice = totalAmount;
+    let promoCodeRecord: any = null;
+    let discountAmount = 0;
+
+    // Validation et déduction serveur du Code Promo
+    if (data.promoCodeId || data.promoCode) {
+      const codeToFind = (data.promoCode || "").trim().toUpperCase();
+      const db = prisma as any;
+      promoCodeRecord = await db.promoCode.findFirst({
+        where: {
+          OR: [
+            ...(data.promoCodeId ? [{ id: data.promoCodeId }] : []),
+            ...(codeToFind ? [{ code: codeToFind }] : []),
+          ],
+          isActive: true,
+        },
+      });
+
+      if (promoCodeRecord) {
+        const now = new Date();
+        const notExpired = !promoCodeRecord.expiresAt || now <= new Date(promoCodeRecord.expiresAt);
+        const started = !promoCodeRecord.startDate || now >= new Date(promoCodeRecord.startDate);
+        const maxUsesOk = promoCodeRecord.maxUses === null || promoCodeRecord.usedCount < promoCodeRecord.maxUses;
+        const targetTripOk = !promoCodeRecord.targetTripId || promoCodeRecord.targetTripId === trip.id;
+        const minAmountOk = !promoCodeRecord.minBookingAmount || totalAmount >= promoCodeRecord.minBookingAmount;
+
+        if (notExpired && started && maxUsesOk && targetTripOk && minAmountOk) {
+          if (promoCodeRecord.discountType === "PERCENTAGE") {
+            discountAmount = (totalAmount * promoCodeRecord.discountValue) / 100;
+            if (promoCodeRecord.maxDiscountLimit && discountAmount > promoCodeRecord.maxDiscountLimit) {
+              discountAmount = promoCodeRecord.maxDiscountLimit;
+            }
+          } else {
+            discountAmount = promoCodeRecord.discountValue;
+          }
+
+          discountAmount = Math.min(discountAmount, totalAmount);
+          discountAmount = Math.round(discountAmount);
+          totalAmount = Math.max(0, totalAmount - discountAmount);
+        } else {
+          promoCodeRecord = null;
+        }
+      }
+    }
+
+    const depositAmount = Math.min(paxCount * depositPerPax, totalAmount);
     const amountPaid = data.paymentOption === "FULL" ? totalAmount : depositAmount;
 
     const subtotalHt = Math.round((totalAmount / 1.2) * 100) / 100;
@@ -174,6 +219,11 @@ export async function createBookingAction(input: CreateBookingInput) {
           amountPaid: 0,  // Rétro-compatibilité : 0
           paymentStatus: PaymentStatus.PENDING,
           notes: data.notes || null,
+          // Code Promo appliqué
+          promoCodeId: promoCodeRecord?.id || null,
+          appliedPromoCode: promoCodeRecord?.code || null,
+          discountAmount: discountAmount,
+          originalPrice: promoCodeRecord ? originalPrice : null,
           travelers: {
             create: data.travelers.map((t) => ({
               fullName: t.fullName,
@@ -228,6 +278,15 @@ export async function createBookingAction(input: CreateBookingInput) {
           invoice: true,
         },
       });
+
+      // Incrémentation du compteur d'utilisations du code promo
+      if (promoCodeRecord?.id) {
+        const dbTx = tx as any;
+        await dbTx.promoCode.update({
+          where: { id: promoCodeRecord.id },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
 
       return booking;
     });
