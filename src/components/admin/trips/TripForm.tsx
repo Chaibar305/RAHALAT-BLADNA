@@ -11,7 +11,7 @@ import {
   Bus, Tag, UtensilsCrossed, ShieldCheck, Clock, Layers, Navigation,
   Check, X, Luggage, Flame, Compass, Copy, Languages, Globe, FolderTree
 } from "lucide-react";
-import { TripFormData, ItineraryDayData, DepartureDateAdminData, PickupPointAdminData } from "@/lib/validations/trip.schema";
+import { TripFormData, ItineraryDayData, DepartureDateAdminData, PickupPointAdminData, TripExtraOptionData } from "@/lib/validations/trip.schema";
 import { createTripAction, updateTripAction } from "@/actions/trip.actions";
 import { getCollectionsAction, SerializedCollection } from "@/actions/collection.actions";
 import { R2ImageUploader } from "@/components/admin/R2ImageUploader";
@@ -187,6 +187,10 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
     equipmentFr: initialData?.equipmentFr || initialData?.checklistItemsFr || [],
     equipmentAr: initialData?.equipmentAr || initialData?.checklistItemsAr || [],
     equipmentEn: initialData?.equipmentEn || initialData?.checklistItemsEn || [],
+    notIncludedFr: initialData?.notIncludedFr || initialData?.excludedServicesFr || initialData?.excludedFr || [],
+    extraOptions: (initialData as any)?.extraOptions && (initialData as any).extraOptions.length > 0
+      ? (initialData as any).extraOptions
+      : [],
   });
 
   // Slug generator helper
@@ -712,6 +716,53 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
     }
   };
 
+  // Extra options handlers (Activités et suppléments payants)
+  const handleAddExtraOption = () => {
+    const newOpt: TripExtraOptionData = {
+      id: `opt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      nameFr: "",
+      nameAr: "",
+      nameEn: "",
+      price: 0,
+      isPerPerson: true,
+      descriptionFr: "",
+      descriptionAr: "",
+      descriptionEn: "",
+    };
+    setFormData((prev: any) => ({
+      ...prev,
+      extraOptions: [...(prev.extraOptions || []), newOpt],
+    }));
+  };
+
+  const handleUpdateExtraOption = (index: number, field: string, value: any) => {
+    setFormData((prev: any) => {
+      const opts = [...(prev.extraOptions || [])];
+      opts[index] = { ...opts[index], [field]: value };
+      return { ...prev, extraOptions: opts };
+    });
+  };
+
+  const handleRemoveExtraOption = (index: number) => {
+    setFormData((prev: any) => {
+      const opts = [...(prev.extraOptions || [])];
+      opts.splice(index, 1);
+      return { ...prev, extraOptions: opts };
+    });
+  };
+
+  const handleMoveExtraOption = (index: number, direction: "UP" | "DOWN") => {
+    setFormData((prev: any) => {
+      const opts = [...(prev.extraOptions || [])];
+      const targetIndex = direction === "UP" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= opts.length) return prev;
+      const temp = opts[index];
+      opts[index] = opts[targetIndex];
+      opts[targetIndex] = temp;
+      return { ...prev, extraOptions: opts };
+    });
+  };
+
   // Submit Handler
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -722,6 +773,11 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
       try {
         const payload: TripFormData = {
           ...formData,
+          durationDays: Number(formData.durationDays) || 1,
+          durationNights: Number(formData.durationNights) || 0,
+          basePrice: Number(formData.basePrice) || 0,
+          depositPerPerson: Number(formData.depositPerPerson) || 0,
+          singleSupplement: Number(formData.singleSupplement) || 0,
           shortDescriptionFr: formData.shortDescriptionFr || (formData.overviewFr ? formData.overviewFr.slice(0, 180) : "Voyage organisé avec Rahalat Bladna"),
           shortDescriptionAr: formData.shortDescriptionAr || (formData.overviewAr ? formData.overviewAr.slice(0, 180) : "برنامج سياحي مميز مع رحلات بلادنا"),
           shortDescriptionEn: formData.shortDescriptionEn || (formData.overviewEn ? formData.overviewEn.slice(0, 180) : "Exclusive guided travel experience"),
@@ -739,29 +795,107 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
           equipmentEn: formData.equipmentEn?.length ? formData.equipmentEn : (formData.checklistItemsEn || []),
           includedServices: formData.includedServices?.length ? formData.includedServices : (formData.includedServicesFr || []),
           excludedServices: formData.excludedServices?.length ? formData.excludedServices : (formData.excludedServicesFr || []),
+          notIncludedFr: formData.notIncludedFr || formData.excludedServicesFr || formData.excludedFr || [],
           whatToBring: formData.whatToBring?.length ? formData.whatToBring : (formData.checklistItemsFr || []),
+          extraOptions: (formData.extraOptions || [])
+            .filter((opt: any) => opt && opt.nameFr && String(opt.nameFr).trim().length > 0)
+            .map((opt: any) => ({
+              id: opt.id || undefined,
+              nameFr: String(opt.nameFr).trim(),
+              nameAr: opt.nameAr ? String(opt.nameAr).trim() : null,
+              nameEn: opt.nameEn ? String(opt.nameEn).trim() : null,
+              price: Number(opt.price) || 0,
+              isPerPerson: opt.isPerPerson ?? true,
+              maxQuantity: opt.maxQuantity ? Number(opt.maxQuantity) : null,
+              descriptionFr: opt.descriptionFr ? String(opt.descriptionFr).trim() : null,
+              descriptionAr: opt.descriptionAr ? String(opt.descriptionAr).trim() : null,
+              descriptionEn: opt.descriptionEn ? String(opt.descriptionEn).trim() : null,
+            })),
+          pickupPoints: (formData.pickupPoints || [])
+            .filter((pt: any) => pt && pt.cityName && String(pt.cityName).trim().length > 0)
+            .map((pt: any, idx: number) => ({
+              ...pt,
+              cityName: String(pt.cityName).trim(),
+              city: pt.city || pt.cityName,
+              locationName: pt.locationName || `Point ${pt.cityName}`,
+              departureTime: pt.departureTime || "07:00",
+              orderIndex: pt.orderIndex !== undefined ? pt.orderIndex : idx,
+            })),
+          itineraryDays: (formData.itineraryDays || []).map((day: any, idx: number) => ({
+            ...day,
+            dayNumber: day.dayNumber || idx + 1,
+            titleFr: day.titleFr || `Étape ${idx + 1}`,
+            titleAr: day.titleAr || day.titleFr || `المرحلة ${idx + 1}`,
+            titleEn: day.titleEn || null,
+            location: day.location || "Maroc",
+            featuredImage: day.featuredImage || formData.coverImageUrl || "",
+            meals: Array.isArray(day.meals) ? day.meals : [],
+            descriptionFr: day.descriptionFr || "",
+            descriptionAr: day.descriptionAr || day.descriptionFr || "",
+            descriptionEn: day.descriptionEn || null,
+            activityTags: Array.isArray(day.activityTags) ? day.activityTags : [],
+            addons: Array.isArray(day.addons) ? day.addons : [],
+          })),
+          departures: (formData.departures || [])
+            .filter((dep: any) => dep && dep.startDate && dep.endDate)
+            .map((dep: any) => ({
+              ...dep,
+              totalSeats: Number(dep.totalSeats) || 18,
+              bookedSeats: Number(dep.bookedSeats) || 0,
+              specificPrice: dep.specificPrice != null ? Number(dep.specificPrice) : null,
+            })),
         };
 
-        const res = isEditing && payload.id
-          ? await updateTripAction(payload.id, payload)
+        const targetTripId = payload.id || initialData?.id;
+        const res = isEditing && targetTripId
+          ? await updateTripAction(targetTripId as string, payload)
           : await createTripAction(payload);
 
         if (res.success) {
-          setSuccessMsg("Circuit enregistré avec succès !");
+          setSuccessMsg(isAr ? "تم حفظ التعديلات بنجاح !" : "Circuit enregistré avec succès !");
+          router.refresh();
           setTimeout(() => {
             router.push(`/${locale}/admin/trips`);
-          }, 1000);
+          }, 1200);
         } else {
-          setErrorMsg("Veuillez vérifier les champs obligatoires du formulaire.");
+          let errorText = "";
+          if ((res as any).error) {
+            errorText = (res as any).error;
+          } else if ((res as any).errors) {
+            const formattedErrors: string[] = [];
+            const extractErrors = (obj: any, prefix = "") => {
+              if (!obj || typeof obj !== "object") return;
+              if (Array.isArray(obj._errors) && obj._errors.length > 0) {
+                formattedErrors.push(`${prefix ? prefix + " : " : ""}${obj._errors.join(", ")}`);
+              }
+              for (const [k, v] of Object.entries(obj)) {
+                if (k !== "_errors" && v && typeof v === "object") {
+                  extractErrors(v, prefix ? `${prefix}.${k}` : k);
+                }
+              }
+            };
+            extractErrors((res as any).errors);
+            if (formattedErrors.length > 0) {
+              errorText = `Champs à corriger : ${formattedErrors.slice(0, 3).join(" | ")}`;
+            }
+          }
+          const finalMsg = errorText || (isAr ? "يرجى مراجعة الحقول المطلوبة في النموذج." : "Veuillez vérifier les champs obligatoires du formulaire.");
+          setErrorMsg(finalMsg);
+          if (typeof window !== "undefined") {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
         }
       } catch (err: any) {
-        setErrorMsg(err.message || "Une erreur est survenue lors de l'enregistrement.");
+        setErrorMsg(err.message || (isAr ? "حدث خطأ أثناء الحفظ." : "Une erreur est survenue lors de l'enregistrement."));
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       }
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 text-slate-900 dark:text-slate-100">
+    <form onSubmit={handleSubmit} noValidate className="space-y-6 text-slate-900 dark:text-slate-100">
       {/* Top Action Header */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-30 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -2119,8 +2253,213 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
             </div>
           </div>
 
+          {/* SECTION DÉDIÉE : ACTIVITÉS & SUPPLÉMENTS OPTIONNELS (WIDGET RÉSERVATION) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-cyan-500/30 dark:border-cyan-500/20 p-6 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-100 dark:border-cyan-900/30 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                  <span>
+                    {isAr
+                      ? "الأنشطة والخيارات الإضافية (نافذة الحجز)"
+                      : "Activités & Suppléments Optionnels (Widget Réservation)"}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {isAr
+                    ? "حدد الأنشطة الاختيارية المدفوعة التي يمكن للمسافر اختيارها في استمارة الحجز مع سعرها في الدراهم (MAD)."
+                    : "Gérez les activités payantes sélectionnables par les clients lors de la réservation (ex: Vol en Montgolfière, Quad, Chambre Single...). Le tarif s'ajoute dynamiquement au montant total et à l'acompte."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 self-start sm:self-center">
+                <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-500/10 px-3 py-1.5 rounded-full border border-cyan-200 dark:border-cyan-500/20">
+                  {(formData.extraOptions || []).length} option(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddExtraOption}
+                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isAr ? "إضافة نشاط إضافي" : "+ Ajouter une Option Supplémentaire"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List / Dynamic Table */}
+            {(!formData.extraOptions || formData.extraOptions.length === 0) ? (
+              <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                <Sparkles className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isAr
+                    ? "لا توجد أي أنشطة إضافية مدفوعة لهذا البرنامج بعد."
+                    : "Aucun supplément optionnel configuré. Cliquez sur le bouton ci-dessus pour en ajouter."}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddExtraOption}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-700 dark:text-slate-300 font-bold text-xs transition"
+                >
+                  {isAr ? "إضافة خيار الآن" : "+ Ajouter une Option Supplémentaire"}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(formData.extraOptions || []).map((opt: any, index: number) => (
+                  <div
+                    key={opt.id || index}
+                    className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 hover:border-cyan-400 dark:hover:border-cyan-600 transition"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-400 font-bold text-xs flex items-center justify-center shrink-0">
+                          #{index + 1}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          {opt.nameFr || (isAr ? `نشاط ${index + 1}` : `Option ${index + 1}`)}
+                        </span>
+                        {opt.price > 0 && (
+                          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            +{formatMAD(opt.price)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => handleMoveExtraOption(index, "UP")}
+                          className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
+                          title="Monter"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === (formData.extraOptions?.length || 1) - 1}
+                          onClick={() => handleMoveExtraOption(index, "DOWN")}
+                          className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 disabled:opacity-30 transition"
+                          title="Descendre"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExtraOption(index)}
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Ligne 1 : Intitulés multilingues (FR, AR, EN) */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* Nom FR */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            {isAr ? "اسم النشاط (FR) *" : "Nom de l'activité (FR) *"}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Vol en Montgolfière au lever du soleil"
+                            value={opt.nameFr || ""}
+                            onChange={(e) => handleUpdateExtraOption(index, "nameFr", e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:border-cyan-500 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Nom AR */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            {isAr ? "الاسم بالعربية (AR)" : "(AR) الاسم بالعربية"}
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            placeholder="ركوب المنطاد..."
+                            value={opt.nameAr || ""}
+                            onChange={(e) => handleUpdateExtraOption(index, "nameAr", e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:border-cyan-500 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Nom EN */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            {isAr ? "اسم النشاط بالإنجليزية (EN)" : "Nom de l'activité (EN)"}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Sunrise Hot Air Balloon Flight"
+                            value={opt.nameEn || ""}
+                            onChange={(e) => handleUpdateExtraOption(index, "nameEn", e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:border-cyan-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Ligne 2 : Tarification & Facturation */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-center">
+                        {/* Prix unitaire */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            {isAr ? "السعر الفردي (MAD) *" : "Prix unitaire (MAD) *"}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="2050"
+                              value={opt.price ?? ""}
+                              onChange={(e) => handleUpdateExtraOption(index, "price", parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white font-mono font-bold focus:border-cyan-500 focus:outline-none pr-9"
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                              DH
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Facturation Par personne / Par groupe */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            {isAr ? "نوع الفوترة" : "Facturation"}
+                          </label>
+                          <select
+                            value={opt.isPerPerson ? "true" : "false"}
+                            onChange={(e) => handleUpdateExtraOption(index, "isPerPerson", e.target.value === "true")}
+                            className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-bold focus:border-cyan-500 focus:outline-none"
+                          >
+                            <option value="true">{isAr ? "لكل شخص" : "Par personne"}</option>
+                            <option value="false">{isAr ? "للمجموعة / جزافي" : "Par groupe / Forfait"}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* 2. SERVICES NON INCLUS */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/40 p-6 shadow-sm space-y-5">
+            {/* Note informative pour séparer les extras des frais non inclus */}
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>
+                {isAr
+                  ? "تنبيه مهم : الأنشطة والخيارات الإضافية المدفوعة القابلة للحجز يتم تحديد أسعارها وإدارتها في القسم أعلاه (الأنشطة والخيارات الإضافية). احتفظ هنا فقط بالمصاريف الإرشادية غير القابلة للحجز (مثل: وجبات الغداء، الإكراميات، المصاريف الشخصية)."
+                  : "Important : Les activités payantes réservables par le client dans le widget se gèrent dans la section ci-dessus « Activités & Suppléments Optionnels ». Conservez ici uniquement les frais purement informatifs et non réservables (ex: Déjeuners sur route, Dépenses personnelles, Pourboires)."}
+              </span>
+            </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 dark:border-rose-900/30 pb-4">
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -2480,6 +2819,36 @@ export function TripForm({ initialData, isEditing = false, availableCollections 
           </div>
         </div>
       )}
+
+      {/* Bottom Sticky Action Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 sticky bottom-4 z-30">
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <Sparkles className="w-4 h-4 text-cyan-500" />
+          <span>
+            {isEditing 
+              ? (isAr ? "سيتم حفظ جميع التعديلات مباشرة في قاعدة البيانات" : "Toutes les modifications seront appliquées directement") 
+              : (isAr ? "إنشاء ونشر البرنامج السياحي" : "Créer et publier le circuit")}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <Link
+            href={`/${locale}/admin/trips`}
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition"
+          >
+            {isAr ? "إلغاء" : "Annuler"}
+          </Link>
+
+          <button
+            type="submit"
+            disabled={isPending}
+            className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isPending ? (isAr ? "جاري الحفظ..." : "Enregistrement...") : (isAr ? "حفظ التعديلات" : "Enregistrer les modifications")}</span>
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

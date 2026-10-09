@@ -958,24 +958,37 @@ export default async function TripDetailPage({
                 ]
             )
         ),
-    addons: dbTrip?.addons && dbTrip.addons.length > 0
-      ? dbTrip.addons.map((a) => ({
+    addons: (() => {
+      const dbExtraOptions = (dbTrip as any)?.extraOptions;
+      if (Array.isArray(dbExtraOptions) && dbExtraOptions.length > 0) {
+        return dbExtraOptions.map((opt: any) => ({
+          id: opt.id || String(Math.random()),
+          name: isAr ? (opt.nameAr || opt.nameFr) : (isEn && opt.nameEn ? opt.nameEn : opt.nameFr),
+          price: Number(opt.price),
+          description: isAr ? (opt.descriptionAr || "") : (isEn && opt.descriptionEn ? opt.descriptionEn : (opt.descriptionFr || "")),
+          isPerPerson: opt.isPerPerson ?? true,
+        }));
+      }
+      if (dbTrip?.addons && dbTrip.addons.length > 0) {
+        return dbTrip.addons.map((a) => ({
           id: a.id,
-          name: isAr ? a.nameAr : a.nameFr,
+          name: isAr ? a.nameAr : (isEn && (a as any).nameEn ? (a as any).nameEn : a.nameFr),
           price: Number(a.price),
-          description: isAr ? (a.descriptionAr || "") : (a.descriptionFr || ""),
+          description: isAr ? (a.descriptionAr || "") : (isEn && (a as any).descriptionEn ? (a as any).descriptionEn : (a.descriptionFr || "")),
           isPerPerson: a.isPerPerson,
-        }))
-      : (isAsfalou
-          ? [
-              { id: "a1", name: isAr ? "تأجير حزمة معدات مائية وحافظة هاتف مقاومة للماء" : "Pack Équipement Aquatique & Pochette Étanche", price: 50, description: isAr ? "حافظة مقاومة للماء ومنشفة" : "Pochette étanche IPX8 et serviette", isPerPerson: true },
-              { id: "a2", name: isAr ? "جلسة تصوير احترافية وفيديو درون تذكاري" : "Shooting Photo Pro & Drone Souvenir", price: 150, description: isAr ? "صور عالية الدقة وفيديو درون" : "Photos HD individuelles et vidéo drone", isPerPerson: true },
-            ]
-          : [
-              { id: "a1", name: isAr ? "جولة كواد في الكثبان الذهبية (ساعة)" : "Session Quad 1h dans les dunes", price: 350, description: isAr ? "مغامرة كواد ممتعة ومؤطرة" : "Randonnée sportive guidée sur quad puissant", isPerPerson: true },
-              { id: "a2", name: isAr ? "جولة 4x4 في الكثبان وقرية خملية" : "Excursion 4x4 Tour des Dunes & Village Khamlia", price: 200, description: isAr ? "زيارة الرحل وموسيقى كناوة" : "Visite des nomades et découverte Gnawa", isPerPerson: true },
-            ]
-        ),
+        }));
+      }
+      if (isAsfalou) {
+        return [
+          { id: "a1", name: isAr ? "تأجير حزمة معدات مائية وحافظة هاتف مقاومة للماء" : "Pack Équipement Aquatique & Pochette Étanche", price: 50, description: isAr ? "حافظة مقاومة للماء ومنشفة" : "Pochette étanche IPX8 et serviette", isPerPerson: true },
+          { id: "a2", name: isAr ? "جلسة تصوير احترافية وفيديو درون تذكاري" : "Shooting Photo Pro & Drone Souvenir", price: 150, description: isAr ? "صور عالية الدقة وفيديو درون" : "Photos HD individuelles et vidéo drone", isPerPerson: true },
+        ];
+      }
+      return [
+        { id: "a1", name: isAr ? "جولة كواد في الكثبان الذهبية (ساعة)" : "Session Quad 1h dans les dunes", price: 350, description: isAr ? "مغامرة كواد ممتعة ومؤطرة" : "Randonnée sportive guidée sur quad puissant", isPerPerson: true },
+        { id: "a2", name: isAr ? "جولة 4x4 في الكثبان وقرية خملية" : "Excursion 4x4 Tour des Dunes & Village Khamlia", price: 200, description: isAr ? "زيارة الرحل وموسيقى كناوة" : "Visite des nomades et découverte Gnawa", isPerPerson: true },
+      ];
+    })(),
     showOverview: (dbTrip as any)?.showOverview !== false,
     overviewFr: (dbTrip as any)?.overviewFr || "",
     overviewAr: (dbTrip as any)?.overviewAr || "",

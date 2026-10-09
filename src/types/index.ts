@@ -128,3 +128,9 @@ export interface BreakEvenAnalysis {
   currentGrossMargin: number;
   isProfitable: boolean;
 }
+
+export type DiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
+export const DiscountType = {
+  PERCENTAGE: "PERCENTAGE" as const,
+  FIXED_AMOUNT: "FIXED_AMOUNT" as const,
+};

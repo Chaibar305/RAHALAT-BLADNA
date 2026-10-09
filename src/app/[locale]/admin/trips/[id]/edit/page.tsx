@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { TripForm } from "@/components/admin/trips/TripForm";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function EditTripPage({
   params: { id },
 }: {
@@ -25,6 +28,7 @@ export default async function EditTripPage({
       pickupPoints: {
         orderBy: { orderIndex: "asc" },
       },
+      addons: true,
     },
   });
 
@@ -127,7 +131,25 @@ export default async function EditTripPage({
     equipmentEn: (trip as any).equipmentEn || (trip as any).checklistItemsEn || [],
     includedServices: (trip as any).includedServices || (trip as any).includedServicesFr || [],
     excludedServices: (trip as any).excludedServices || (trip as any).excludedServicesFr || [],
+    notIncludedFr: (trip as any).notIncludedFr || (trip as any).excludedServicesFr || (trip as any).excludedFr || [],
     whatToBring: (trip as any).whatToBring || (trip as any).checklistItemsFr || [],
+    extraOptions: Array.isArray((trip as any).extraOptions) && (trip as any).extraOptions.length > 0
+      ? (trip as any).extraOptions.map((opt: any) => ({
+          ...opt,
+          nameEn: opt.nameEn || "",
+          descriptionEn: opt.descriptionEn || "",
+        }))
+      : (trip as any).addons?.map((a: any) => ({
+          id: a.id,
+          nameFr: a.nameFr,
+          nameAr: a.nameAr || "",
+          nameEn: a.nameEn || "",
+          price: Number(a.price),
+          isPerPerson: a.isPerPerson ?? true,
+          descriptionFr: a.descriptionFr || "",
+          descriptionAr: a.descriptionAr || "",
+          descriptionEn: a.descriptionEn || "",
+        })) || [],
   };
 
   return (

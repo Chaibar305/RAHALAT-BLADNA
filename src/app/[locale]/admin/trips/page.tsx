@@ -4,6 +4,9 @@ import { getCollectionsAction } from "@/actions/collection.actions";
 import { AdminTripList } from "@/components/admin/trips/AdminTripList";
 import { requireAdminSession } from "@/lib/adminAuth";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AdminTripsPage({
   params: { locale },
 }: {

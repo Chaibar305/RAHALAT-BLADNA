@@ -165,7 +165,7 @@ export default async function AdminFinancesPage({
           <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 sm:col-span-2">
             <span className="text-[10px] uppercase font-black text-emerald-600 dark:text-emerald-400 block tracking-wider mb-1 flex items-center justify-between">
               <span>{isAr ? "الحساب البنكي لتحصيل الأقساط (RIB)" : "RIB Bancaire pour Règlement des Acomptes"}</span>
-              <span className="font-mono text-[10px]">{agencySettings.bankName || "Attijariwafa / CIH"}</span>
+              <span className="font-mono text-[10px]">{agencySettings.bankName || "CIH Bank"}</span>
             </span>
             <p className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm tracking-wide">
               {agencySettings.bankRib ? agencySettings.bankRib.replace(/(\d{3})(\d{3})(\d{16})(\d{2})/, "$1 $2 $3 $4") : "Non configuré"}

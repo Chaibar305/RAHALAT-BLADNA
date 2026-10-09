@@ -88,6 +88,7 @@ export async function createTripAction(data: TripFormData) {
 
   const parsed = TripFormSchema.safeParse(data);
   if (!parsed.success) {
+    console.error("❌ Validation error in createTripAction:", JSON.stringify(parsed.error.format(), null, 2));
     return { success: false, errors: parsed.error.format() };
   }
 
@@ -167,8 +168,45 @@ export async function createTripAction(data: TripFormData) {
             ? validData.whatToBring
             : (validData.checklistItemsFr || validData.equipmentFr || []),
           galleryImages: validData.itineraryDays?.map((d) => d.featuredImage).filter(Boolean) || [],
+          notIncludedFr: validData.notIncludedFr || validData.excludedServicesFr || validData.excludedFr || [],
+          extraOptions: validData.extraOptions && validData.extraOptions.length > 0
+            ? validData.extraOptions.map((opt) => ({
+                id: opt.id || `opt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                nameFr: opt.nameFr,
+                nameAr: opt.nameAr || null,
+                nameEn: opt.nameEn || null,
+                price: Number(opt.price),
+                isPerPerson: opt.isPerPerson ?? true,
+                maxQuantity: opt.maxQuantity ?? null,
+                descriptionFr: opt.descriptionFr || null,
+                descriptionAr: opt.descriptionAr || null,
+                descriptionEn: opt.descriptionEn || null,
+              }))
+            : [],
         } as any,
       });
+
+      // Synchronisation des options interactives payantes (TripAddon)
+      if (validData.extraOptions && validData.extraOptions.length > 0) {
+        for (const opt of validData.extraOptions) {
+          if (opt.nameFr && !isNaN(Number(opt.price))) {
+            await tx.tripAddon.create({
+              data: {
+                tripId: trip.id,
+                nameFr: opt.nameFr,
+                nameAr: opt.nameAr || opt.nameFr,
+                nameEn: opt.nameEn || null,
+                price: Number(opt.price),
+                isPerPerson: opt.isPerPerson ?? true,
+                descriptionFr: opt.descriptionFr || null,
+                descriptionAr: opt.descriptionAr || null,
+                descriptionEn: opt.descriptionEn || null,
+                isActive: true,
+              },
+            });
+          }
+        }
+      }
 
       // Synchronisation des étapes journalières (ItineraryDays)
       if (validData.itineraryDays && validData.itineraryDays.length > 0) {
@@ -259,6 +297,7 @@ export async function updateTripAction(id: string, data: TripFormData) {
 
   const parsed = TripFormSchema.safeParse(data);
   if (!parsed.success) {
+    console.error("❌ Validation error in updateTripAction:", JSON.stringify(parsed.error.format(), null, 2));
     return { success: false, errors: parsed.error.format() };
   }
 
@@ -266,8 +305,20 @@ export async function updateTripAction(id: string, data: TripFormData) {
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
+      // Résolution du circuit par ID (CUID) ou par SLUG
+      const targetTrip = await tx.trip.findFirst({
+        where: { OR: [{ id }, { slug: id }] },
+        select: { id: true, slug: true, coverImageUrl: true },
+      });
+
+      if (!targetTrip) {
+        throw new Error("Circuit introuvable dans la base de données");
+      }
+
+      const tripId = targetTrip.id;
+
       const trip = await tx.trip.update({
-        where: { id },
+        where: { id: tripId },
         data: {
           titleFr: validData.titleFr,
           titleAr: validData.titleAr,
@@ -325,28 +376,66 @@ export async function updateTripAction(id: string, data: TripFormData) {
           whatToBring: validData.whatToBring && validData.whatToBring.length > 0
             ? validData.whatToBring
             : (validData.checklistItemsFr || validData.equipmentFr || []),
+          notIncludedFr: validData.notIncludedFr || validData.excludedServicesFr || validData.excludedFr || [],
+          extraOptions: validData.extraOptions && validData.extraOptions.length > 0
+            ? validData.extraOptions.map((opt) => ({
+                id: opt.id || `opt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                nameFr: opt.nameFr,
+                nameAr: opt.nameAr || null,
+                nameEn: opt.nameEn || null,
+                price: Number(opt.price),
+                isPerPerson: opt.isPerPerson ?? true,
+                maxQuantity: opt.maxQuantity ?? null,
+                descriptionFr: opt.descriptionFr || null,
+                descriptionAr: opt.descriptionAr || null,
+                descriptionEn: opt.descriptionEn || null,
+              }))
+            : [],
         } as any,
       });
 
+      // Synchronisation des options interactives payantes (TripAddon)
+      if (validData.extraOptions) {
+        await tx.tripAddon.deleteMany({ where: { tripId } });
+        for (const opt of validData.extraOptions) {
+          if (opt.nameFr && !isNaN(Number(opt.price))) {
+            await tx.tripAddon.create({
+              data: {
+                tripId,
+                nameFr: opt.nameFr,
+                nameAr: opt.nameAr || opt.nameFr,
+                nameEn: opt.nameEn || null,
+                price: Number(opt.price),
+                isPerPerson: opt.isPerPerson ?? true,
+                descriptionFr: opt.descriptionFr || null,
+                descriptionAr: opt.descriptionAr || null,
+                descriptionEn: opt.descriptionEn || null,
+                isActive: true,
+              },
+            });
+          }
+        }
+      }
+
       // Synchronisation des étapes journalières (ItineraryDays)
       if (validData.itineraryDays) {
-        await tx.itineraryDay.deleteMany({ where: { tripId: id } });
+        await tx.itineraryDay.deleteMany({ where: { tripId } });
         for (let idx = 0; idx < validData.itineraryDays.length; idx++) {
           const day = validData.itineraryDays[idx];
           await tx.itineraryDay.create({
             data: {
-              tripId: id,
+              tripId,
               dayNumber: day.dayNumber || idx + 1,
               titleFr: day.titleFr,
               titleAr: day.titleAr || day.titleFr,
               titleEn: day.titleEn || null,
               timeSlot: day.timeSlot || null,
               locationName: day.locationName || day.location || null,
-              location: day.location,
+              location: day.location || "Maroc",
               featuredImage: day.featuredImage || trip.coverImageUrl,
               meals: day.meals || [],
-              descriptionFr: day.descriptionFr,
-              descriptionAr: day.descriptionAr || day.descriptionFr,
+              descriptionFr: day.descriptionFr || "",
+              descriptionAr: day.descriptionAr || day.descriptionFr || "",
               descriptionEn: day.descriptionEn || null,
               activityTags: day.activityTags || [],
             } as any,
@@ -356,64 +445,77 @@ export async function updateTripAction(id: string, data: TripFormData) {
 
       // Synchronisation des dates de départs
       if (validData.departures && validData.departures.length > 0) {
-        await tx.departureDate.deleteMany({ where: { tripId: id } });
-        for (const dep of validData.departures) {
-          await tx.departureDate.create({
-            data: {
-              tripId: id,
-              startDate: new Date(dep.startDate),
-              endDate: new Date(dep.endDate),
-              totalCapacity: dep.totalSeats || 18,
-              minSeatsForGuaranteed: 10,
-              basePriceDouble: validData.basePrice,
-              singleRoomSupplement: validData.singleSupplement || 350,
-              depositAmount: validData.depositPerPerson || 500,
-              status: dep.status === "GUARANTEED" ? "GUARANTEED" : "OPEN_FOR_BOOKING",
-            },
-          });
+        const validDeps = validData.departures.filter((dep) => dep && dep.startDate && dep.endDate);
+        if (validDeps.length > 0) {
+          await tx.departureDate.deleteMany({ where: { tripId } });
+          for (const dep of validDeps) {
+            await tx.departureDate.create({
+              data: {
+                tripId,
+                startDate: new Date(dep.startDate),
+                endDate: new Date(dep.endDate),
+                totalCapacity: dep.totalSeats || 18,
+                minSeatsForGuaranteed: 10,
+                basePriceDouble: validData.basePrice,
+                singleRoomSupplement: validData.singleSupplement || 350,
+                depositAmount: validData.depositPerPerson || 500,
+                status: dep.status === "GUARANTEED" ? "GUARANTEED" : "OPEN_FOR_BOOKING",
+              },
+            });
+          }
         }
       }
 
       // Synchronisation des points de ramassage
       if (validData.pickupPoints) {
-        await tx.tripPickupPoint.deleteMany({ where: { tripId: id } });
-        for (let idx = 0; idx < validData.pickupPoints.length; idx++) {
-          const pt = validData.pickupPoints[idx];
-          await tx.tripPickupPoint.create({
-            data: {
-              tripId: id,
-              cityName: pt.cityName,
-              city: pt.city || pt.cityName,
-              locationNameFr: pt.locationName,
-              locationNameAr: pt.locationName,
-              locationName: pt.locationName,
-              departureTime: pt.departureTime,
-              meetingTime: pt.meetingTime || pt.departureTime,
-              googleMapsUrl: pt.googleMapsUrl || null,
-              orderIndex: pt.orderIndex !== undefined ? pt.orderIndex : idx,
-            } as any,
-          });
+        const validPickups = validData.pickupPoints.filter((pt) => pt && pt.cityName);
+        if (validPickups.length > 0) {
+          await tx.tripPickupPoint.deleteMany({ where: { tripId } });
+          for (let idx = 0; idx < validPickups.length; idx++) {
+            const pt = validPickups[idx];
+            await tx.tripPickupPoint.create({
+              data: {
+                tripId,
+                cityName: pt.cityName,
+                city: pt.city || pt.cityName,
+                locationNameFr: pt.locationName || `Point ${pt.cityName}`,
+                locationNameAr: pt.locationName || pt.cityName,
+                locationName: pt.locationName || pt.cityName,
+                departureTime: pt.departureTime || "07:00",
+                meetingTime: pt.meetingTime || pt.departureTime || "07:00",
+                googleMapsUrl: pt.googleMapsUrl || null,
+                orderIndex: pt.orderIndex !== undefined ? pt.orderIndex : idx,
+              } as any,
+            });
+          }
         }
       }
 
       return trip;
     });
 
+    const locales = ["fr", "ar", "en"];
+    for (const loc of locales) {
+      revalidatePath(`/${loc}/admin/trips`);
+      revalidatePath(`/${loc}/admin/trips/${updated.id}`);
+      revalidatePath(`/${loc}/admin/trips/${updated.id}/edit`);
+      revalidatePath(`/${loc}/admin/trips/${updated.slug}`);
+      revalidatePath(`/${loc}/admin/trips/${updated.slug}/edit`);
+      revalidatePath(`/${loc}/trips/${updated.slug}`);
+      revalidatePath(`/${loc}/trips`);
+      revalidatePath(`/${loc}`);
+    }
     revalidatePath("/admin/trips");
     revalidatePath(`/admin/trips/${updated.id}`);
+    revalidatePath(`/admin/trips/${updated.id}/edit`);
     revalidatePath(`/admin/trips/${updated.slug}`);
     revalidatePath("/trips");
     revalidatePath(`/trips/${updated.slug}`);
-    revalidatePath(`/[locale]/trips/${updated.slug}`, "page");
-    revalidatePath(`/fr/trips/${updated.slug}`);
-    revalidatePath(`/ar/trips/${updated.slug}`);
-    revalidatePath("/fr");
-    revalidatePath("/ar");
     revalidatePath("/");
 
     return { success: true, tripId: updated.id, slug: updated.slug };
   } catch (error: any) {
-    console.error("Erreur lors de la mise à jour du circuit:", error);
+    console.error("❌ Erreur lors de la mise à jour du circuit:", error);
     return { success: false, error: error.message || "Erreur de mise à jour" };
   }
 }

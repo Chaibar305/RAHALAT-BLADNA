@@ -910,8 +910,11 @@ export function BookingCard({
                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
                           {addon.name}
                         </p>
-                        <p className="text-[10px] text-tp-cyan font-bold font-mono">
-                          +{addon.price} MAD
+                        <p className="text-[10px] text-tp-cyan font-bold font-mono flex items-center gap-1">
+                          <span>+{addon.price.toLocaleString("fr-FR")} MAD</span>
+                          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-sans font-normal">
+                            ({addon.isPerPerson ? (isRtl ? "للشخص" : "par pers.") : (isRtl ? "للمجموعة" : "par groupe")})
+                          </span>
                         </p>
                       </div>
 

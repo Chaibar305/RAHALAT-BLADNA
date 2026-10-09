@@ -200,17 +200,11 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     }
   }
 
-  // Nom de Marque et Calligraphie Arabe
+  // Nom de Marque Officiel
   doc.setFont("Amiri", "bold");
   doc.setFontSize(15);
   doc.setTextColor(255, 255, 255);
   doc.text(agency.companyName || "Rahalat Bladna", 30, 14);
-
-  // Séparateur et Calligraphie Arabe (formatée sans bug)
-  doc.setFontSize(13);
-  doc.setTextColor(...COLOR_CYAN);
-  const arabicBrand = formatArabic("رحلات بلادنا");
-  doc.text(`•  ${arabicBrand}`, 76, 14);
 
   // Slogan & Mention de l'Émetteur
   doc.setFont("Amiri", "bold");
@@ -222,14 +216,14 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
   const legalIdentifiers = [
-    agency.licenseNumber ? `Agrément N° ${agency.licenseNumber}` : null,
-    agency.ice ? `ICE : ${agency.ice}` : null,
-    agency.rc ? `RC : ${agency.rc}` : null,
-    agency.taxId ? `IF : ${agency.taxId}` : null,
+    isPartner && agency.licenseNumber ? `Agrément N° ${agency.licenseNumber}` : null,
+    isPartner && agency.ice ? `ICE : ${agency.ice}` : null,
+    isPartner && agency.rc ? `RC : ${agency.rc}` : null,
+    isPartner && agency.taxId ? `IF : ${agency.taxId}` : null,
   ].filter(Boolean).join("  •  ");
   const emitterText = legalIdentifiers
     ? `Émetteur : ${agency.companyName}  •  ${legalIdentifiers}`
-    : `Émetteur : ${agency.companyName}  •  Régime de l'Auto-Entrepreneur (Loi 114-13)`;
+    : `Émetteur : ${agency.companyName}`;
   doc.text(emitterText, 30, 26);
 
   // Coordonnées de Contact Réelles
@@ -426,13 +420,17 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
   doc.setFont("Amiri", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...COLOR_MIDNIGHT);
-  const bankHeader = `COORDONNÉES BANCAIRES OFFICIELLES (${(agency.bankName || "VIREMENT").toUpperCase()})`;
+  const bankHeader = "COORDONNÉES BANCAIRES OFFICIELLES CIH BANK";
   doc.text(bankHeader, 18, finalY + 6);
 
   doc.setFont("Amiri", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...COLOR_SLATE);
-  doc.text(`• Établissement : ${agency.bankName || "Attijariwafa / CIH Bank"}`, 18, finalY + 11.5);
+  const displayBankName = (agency.bankName || "CIH Bank")
+    .replace(/attijariwafa\s*(\/|-)?\s*/gi, "")
+    .replace(/\s*(\/|-)\s*attijariwafa/gi, "")
+    .trim() || "CIH Bank";
+  doc.text(`• Établissement : ${displayBankName}`, 18, finalY + 11.5);
   doc.text(`• Bénéficiaire : ${agency.companyName}`, 18, finalY + 16.5);
 
   doc.setFont("Amiri", "bold");
@@ -490,7 +488,8 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     doc.setFontSize(8);
     doc.setTextColor(...COLOR_DARK_CYAN);
     doc.text("Acompte Réglé :", totalsBoxX + 4, finalY + 16.5);
-    doc.text(`${data.depositPaid.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 16.5, { align: "right" });
+    const depositVal = data.depositPaid ?? (data as any).depositAmount ?? 0;
+    doc.text(`${depositVal.toLocaleString("fr-FR")} DH`, totalsBoxX + totalsBoxWidth - 4, finalY + 16.5, { align: "right" });
   }
 
   // 3. Solde Dû au Départ (Bandeau de mise en valeur)
@@ -621,7 +620,7 @@ export async function generateInvoicePdfBuffer(data: InvoicePdfData): Promise<Bu
     );
   } else {
     // Pied de page épuré orienté Client Voyageur
-    const brandText = `${agency.companyName} (${formatArabic("رحلات بلادنا")}) — Voyages Organisés & Découverte du Maroc • Document émis par voie électronique avec valeur juridique probante.`;
+    const brandText = `${agency.companyName} — Voyages Organisés & Découverte du Maroc • Document émis par voie électronique avec valeur juridique probante.`;
     doc.text(
       brandText,
       pageWidth / 2,

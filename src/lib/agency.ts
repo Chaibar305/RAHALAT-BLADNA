@@ -26,7 +26,7 @@ export const DEFAULT_AGENCY_SETTINGS: AgencySettingsData = {
   rc: null,
   taxId: null,
   bankRib: "230810678459421100810080",
-  bankName: "Attijariwafa / CIH Bank",
+  bankName: "CIH Bank",
 };
 
 export interface UpdateAgencySettingsInput {

@@ -115,7 +115,7 @@ export async function updateAgencySettingsAction(data: UpdateAgencySettingsInput
     const rc = (data.rc || data.rcNumber || "").trim() || null;
     const taxId = (data.taxId || "").trim() || null;
     const bankRib = (data.bankRib || data.ribDetails || "").trim().replace(/\s+/g, "") || null;
-    const bankName = (data.bankName || "").trim() || "Attijariwafa / CIH Bank";
+    const bankName = (data.bankName || "").trim() || "CIH Bank";
 
     if (!companyName || !whatsappPhone || !email) {
       return {

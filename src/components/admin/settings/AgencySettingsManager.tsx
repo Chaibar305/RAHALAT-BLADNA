@@ -36,7 +36,7 @@ export function AgencySettingsManager({
     ice: source.ice || source.iceNumber || "004003997000036",
     rc: source.rc || source.rcNumber || "",
     taxId: source.taxId || "",
-    bankName: source.bankName || "Attijariwafa / CIH Bank",
+    bankName: source.bankName || "CIH Bank",
     bankRib: source.bankRib || (source.bankAccounts?.rib as string)?.replace(/\s+/g, "") || "230810678459421100810080",
   });
 
@@ -75,7 +75,7 @@ export function AgencySettingsManager({
         ice: formData.ice.trim() || null,
         rc: formData.rc.trim() || null,
         taxId: formData.taxId.trim() || null,
-        bankName: formData.bankName.trim() || "Attijariwafa / CIH Bank",
+        bankName: formData.bankName.trim() || "CIH Bank",
         bankRib: formData.bankRib.trim().replace(/\s+/g, "") || null,
       });
 
@@ -286,7 +286,7 @@ export function AgencySettingsManager({
                 type="text"
                 value={formData.bankName}
                 onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                placeholder="CIH Bank / Attijariwafa Bank..."
+                placeholder="CIH Bank..."
                 className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-bold focus:border-tp-cyan focus:outline-none transition"
               />
             </div>

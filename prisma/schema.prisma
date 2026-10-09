@@ -253,7 +253,11 @@ model Trip {
   equipmentEn         String[]           @default([])
   includedServices    String[]           @default([])
   excludedServices    String[]           @default([])
+  notIncludedFr       String[]           @default([]) // Prestations purement informatives non incluses
   whatToBring         String[]           @default([])
+
+  // Options interactives payantes sélectionnables par le client
+  extraOptions        Json?              // Format : Array<{ id: string, nameFr: string, nameAr?: string, price: number, isPerPerson: boolean, maxQuantity?: number, descriptionFr?: string, descriptionAr?: string }>
   coverImageUrl       String
   galleryImages       String[]
   isFeatured          Boolean            @default(false)
