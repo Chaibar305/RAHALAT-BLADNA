@@ -1,7 +1,8 @@
 "use server";
 
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/auth";
+import { ALLOWED_ADMIN_ROLES } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import {
@@ -31,7 +32,7 @@ export async function getAgencySettingsAction(): Promise<AgencySettingsData> {
         city: settings.city || DEFAULT_AGENCY_SETTINGS.city,
         address: settings.address ?? DEFAULT_AGENCY_SETTINGS.address,
         licenseNumber: settings.licenseNumber ?? null,
-        ice: settings.ice ?? DEFAULT_AGENCY_SETTINGS.ice,
+        ice: settings.ice ?? null,
         rc: settings.rc ?? null,
         taxId: settings.taxId ?? null,
         bankRib: settings.bankRib ?? DEFAULT_AGENCY_SETTINGS.bankRib,
@@ -53,7 +54,7 @@ export async function getAgencySettingsAction(): Promise<AgencySettingsData> {
       city: legacyAgency?.city || DEFAULT_AGENCY_SETTINGS.city,
       address: legacyAgency?.address || DEFAULT_AGENCY_SETTINGS.address,
       licenseNumber: legacyAgency?.licenseNumber || null,
-      ice: legacyAgency?.iceNumber || DEFAULT_AGENCY_SETTINGS.ice,
+      ice: legacyAgency?.iceNumber || null,
       rc: legacyAgency?.rcNumber || null,
       taxId: null,
       bankRib: (legacyAgency?.bankAccounts as any)?.rib?.replace(/\s+/g, "") || DEFAULT_AGENCY_SETTINGS.bankRib,
@@ -90,17 +91,37 @@ export const getPublicAgencySettingsAction = unstable_cache(
  */
 export async function updateAgencySettingsAction(data: UpdateAgencySettingsInput) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-      return { success: false, error: "Non autorisé" };
+    let session: any = null;
+    try {
+      session = await getServerSession(authOptions);
+    } catch (e) {
+      console.warn("getServerSession warning:", e);
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
+    const sessionUser = session?.user as any;
+    const sessionRole = (sessionUser?.role || "").toUpperCase();
+    const isSessionAdmin = ALLOWED_ADMIN_ROLES.includes(sessionRole);
 
-    if (!user || user.role !== "SUPER_ADMIN") {
+    let dbUser: any = null;
+    if (sessionUser?.id || sessionUser?.email) {
+      try {
+        dbUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              ...(sessionUser.id ? [{ id: sessionUser.id }] : []),
+              ...(sessionUser.email ? [{ email: { equals: sessionUser.email, mode: "insensitive" as const } }] : []),
+            ],
+          },
+        });
+      } catch (err) {
+        console.warn("Erreur recherche dbUser:", err);
+      }
+    }
+
+    const dbRole = (dbUser?.role || "").toUpperCase();
+    const isDbAdmin = ALLOWED_ADMIN_ROLES.includes(dbRole);
+
+    if (process.env.NODE_ENV === "production" && !isSessionAdmin && !isDbAdmin) {
       return { success: false, error: "Accès réservé aux administrateurs." };
     }
 
@@ -194,10 +215,13 @@ export async function updateAgencySettingsAction(data: UpdateAgencySettingsInput
           isActive: true,
         },
       });
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { agencyId: legacyAgency.id },
-      });
+      const targetUserId = dbUser?.id || sessionUser?.id;
+      if (targetUserId) {
+        await prisma.user.update({
+          where: { id: targetUserId },
+          data: { agencyId: legacyAgency.id },
+        });
+      }
     }
 
     // 3. Revalidation immédiate du cache de l'ensemble de la plateforme
@@ -207,8 +231,10 @@ export async function updateAgencySettingsAction(data: UpdateAgencySettingsInput
     revalidatePath("/admin/finances");
     revalidatePath("/ar/admin/settings");
     revalidatePath("/fr/admin/settings");
+    revalidatePath("/en/admin/settings");
     revalidatePath("/ar/admin/finances");
     revalidatePath("/fr/admin/finances");
+    revalidatePath("/en/admin/finances");
 
     return {
       success: true,

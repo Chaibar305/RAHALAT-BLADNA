@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocale } from "next-intl";
 import { 
   Building2, Save, CheckCircle2, AlertCircle, 
@@ -33,19 +33,38 @@ export function AgencySettingsManager({
     city: source.city || "Rabat",
     address: source.address || "Rabat & Casablanca, Maroc",
     licenseNumber: source.licenseNumber || "",
-    ice: source.ice || source.iceNumber || "004003997000036",
+    ice: source.ice || source.iceNumber || "",
     rc: source.rc || source.rcNumber || "",
     taxId: source.taxId || "",
     bankName: source.bankName || "CIH Bank",
     bankRib: source.bankRib || (source.bankAccounts?.rib as string)?.replace(/\s+/g, "") || "230810678459421100810080",
   });
 
+  useEffect(() => {
+    if (initialSettings || initialAgency) {
+      const src = initialSettings || initialAgency || {};
+      setFormData({
+        companyName: src.companyName || src.name || "Rahalat Bladna",
+        whatsappPhone: src.whatsappPhone || src.phone || "+212681024758",
+        email: src.email || "contact@rahalatbladna.ma",
+        city: src.city || "Rabat",
+        address: src.address || "Rabat & Casablanca, Maroc",
+        licenseNumber: src.licenseNumber || "",
+        ice: src.ice || src.iceNumber || "",
+        rc: src.rc || src.rcNumber || "",
+        taxId: src.taxId || "",
+        bankName: src.bankName || "CIH Bank",
+        bankRib: src.bankRib || (src.bankAccounts?.rib as string)?.replace(/\s+/g, "") || "230810678459421100810080",
+      });
+    }
+  }, [initialSettings, initialAgency]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const cleanIce = formData.ice.replace(/\D/g, "");
-  const cleanRib = formData.bankRib.replace(/\D/g, "");
+  const cleanIce = (formData.ice || "").replace(/\D/g, "");
+  const cleanRib = (formData.bankRib || "").replace(/\D/g, "");
   const isIce15 = cleanIce.length === 15;
   const isRib24 = cleanRib.length === 24;
 
@@ -82,7 +101,7 @@ export function AgencySettingsManager({
       if (res.success) {
         setSuccessMessage(
           isAr
-            ? "تم حفظ وتحديث بيانات الوكالة بنجاح ! التغييرات مفعلة فوراً على الموقع والفواتير."
+            ? "تم حفظ وتحديث بيانات الوكالة بنجاح ! التغييرات مفعلة فوراً على المنظومة والفواتير."
             : "Coordonnées officielles enregistrées avec succès ! Synchronisation immédiate active."
         );
         router.refresh();
@@ -108,8 +127,8 @@ export function AgencySettingsManager({
             </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {isAr
-                ? "تتزامن تلقائياً وبشكل حي مع الـ Navbar، زر الواتساب، الفوتر وفواتير B2B PDF."
-                : "Synchronisation temps réel : Navbar, WhatsApp flottant, Footer, Devis & Factures PDF."}
+                ? "تتزامن تلقائياً وبشكل حي مع الـ Navbar، زر الواتساب، فواتير B2B والمنظومة."
+                : "Synchronisation temps réel : Navbar, WhatsApp flottant, Devis & Factures PDF."}
             </p>
           </div>
         </div>

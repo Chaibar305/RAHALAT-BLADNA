@@ -230,14 +230,6 @@ export function Footer() {
                 <MapPin className="w-3.5 h-3.5 text-tp-cyan shrink-0 mt-0.5" />
                 <span>{settings.address || `${settings.city}, Maroc`}</span>
               </li>
-              {(settings.ice || settings.licenseNumber) && (
-                <li className="text-[11px] text-tp-ivory/60 font-mono pt-1">
-                  {[
-                    settings.licenseNumber ? (locale === "ar" ? `رخصة : ${settings.licenseNumber}` : `Licence : ${settings.licenseNumber}`) : null,
-                    settings.ice ? `ICE : ${settings.ice}` : null,
-                  ].filter(Boolean).join(" • ")}
-                </li>
-              )}
               <li className="pt-2 border-t border-white/10 flex items-center gap-2">
                 <a
                   href="https://www.instagram.com/rahalat_bladna/"

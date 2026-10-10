@@ -22,7 +22,7 @@ export const DEFAULT_AGENCY_SETTINGS: AgencySettingsData = {
   city: "Rabat",
   address: "Rabat & Casablanca, Maroc",
   licenseNumber: null,
-  ice: "004003997000036",
+  ice: null,
   rc: null,
   taxId: null,
   bankRib: "230810678459421100810080",
