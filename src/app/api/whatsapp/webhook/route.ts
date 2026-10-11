@@ -15,26 +15,33 @@ export async function GET(req: NextRequest) {
 }
 
 // 2. Réception des messages clients en temps réel (POST)
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json();
-    const entry = body.entry?.[0]?.changes?.[0]?.value;
-    const message = entry?.messages?.[0];
+    const body = await request.json();
 
-    // Ignorer les statuts de lecture ou les messages sans texte
-    if (!message || message.type !== 'text') {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+    if (body.object === 'whatsapp_business_account') {
+      const entry = body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const message = value?.messages?.[0];
+
+      if (message) {
+        const senderNumber = message.from;
+        const messageText = message.text?.body;
+
+        console.log(`Received message from ${senderNumber}: ${messageText}`);
+
+        if (senderNumber && messageText) {
+          handleIncomingWhatsAppMessage(senderNumber, messageText).catch(console.error);
+        }
+      }
+
+      return new NextResponse('EVENT_RECEIVED', { status: 200 });
     }
 
-    const customerPhone = message.from; // Numéro au format international (ex: 2126XXXXXXXX)
-    const incomingText = message.text.body;
-
-    // Déclencher le traitement par l'agent IA de manière asynchrone
-    handleIncomingWhatsAppMessage(customerPhone, incomingText).catch(console.error);
-
-    return NextResponse.json({ status: 'ok' }, { status: 200 });
+    return new NextResponse('Not found', { status: 404 });
   } catch (error) {
     console.error('Erreur Webhook:', error);
-    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
+    return new NextResponse('Internal Error', { status: 500 });
   }
 }
