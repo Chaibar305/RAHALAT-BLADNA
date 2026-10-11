@@ -31,6 +31,28 @@ export async function POST(request: NextRequest) {
 
         console.log(`Received message from ${senderNumber}: ${messageText}`);
 
+        // Transmission vers le webhook n8n
+        if (process.env.N8N_WEBHOOK_URL && senderNumber && messageText) {
+          try {
+            const n8nResponse = await fetch(process.env.N8N_WEBHOOK_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                sender: senderNumber,
+                message: messageText,
+              }),
+            });
+
+            if (n8nResponse.ok) {
+              console.log('Message forwarded to n8n successfully.');
+            }
+          } catch (n8nErr) {
+            console.error('Erreur transmission vers n8n:', n8nErr);
+          }
+        }
+
         if (senderNumber && messageText) {
           handleIncomingWhatsAppMessage(senderNumber, messageText).catch(console.error);
         }
