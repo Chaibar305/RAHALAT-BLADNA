@@ -376,6 +376,67 @@ const CURATED_TRIPS_METADATA: Record<string, any> = {
       ],
     },
   },
+  "cathedrale-imsfrane-aventure-nature": {
+    categoryBadge: "Haut Atlas & Aventure Nature",
+    categoryBadgeAr: "الأطلس الكبير ومغامرة الطبيعة",
+    highlightBadge: "Sommet 1872m · Safari 4x4 & Quad",
+    highlightBadgeAr: "قمة 1872م · سفاري 4x4 وكواد",
+    frequency: "Départs chaque week-end",
+    frequencyAr: "انطلاقات أسبوعية منتظمة",
+    accommodation: {
+      name: "Auberge de Montagne ou Bivouac Nature d'Imsfrane",
+      nameAr: "مأوى جبلي أصيل أو تخييم في الطبيعة بإمسفران",
+      subtitle: "Hébergement chaleureux face au géant rocheux de la Cathédrale",
+      subtitleAr: "إقامة دافئة وإطلالة ساحرة على جرف الكاتدرائية المهيب",
+      nights: 2,
+      roomTypes: ["Chambre Auberge Confort", "Tente Camping Nature"],
+      roomTypesAr: ["غرفة مأوى مريحة", "خيمة تخييم في الطبيعة"],
+      amenities: [
+        "Auberge conviviale avec jardin ombragé et terrasses panoramiques",
+        "Option Camping aménagé sous la voûte céleste d'Imsfrane",
+        "Pension complète : cuisine du terroir bio, tajines et barbecue",
+        "Soirée animée autour du feu de camp (musique live et Ahidous)",
+      ],
+      amenitiesAr: [
+        "مأوى جبلي أصيل مع حديقة هادئة وإطلالات بانورامية",
+        "خيار التخييم المنظم تحت أضواء النجوم في قلب الطبيعة",
+        "إقامة كاملة : أطباق بلدية طبيعية، طواجن وشواء لذيذ",
+        "سهرة مميزة حول نار المخيم (موسيقى حية وفلكلور أحيدوس)",
+      ],
+    },
+    photos: [
+      {
+        url: "/images/cathedrale-imsfrane/sommet-cathedrale.jpg",
+        title: "Sommet Mythique de la Cathédrale d'Imsfrane (1872 m)",
+        titleAr: "قمة كاتدرائية إمسفران الشامخة (علو 1872 متر)",
+        caption: "Fierté au sommet face au repère d'altitude et panorama à 360° sur Zaouiat Ahansal",
+      },
+      {
+        url: "/images/cathedrale-imsfrane/camion-imsfrane.jpg",
+        title: "Le Célèbre Camion Rouge & Falaises d'Imsfrane",
+        titleAr: "الشاحنة الحمراء الأسطورية وأجراف الكاتدرائية",
+        caption: "Spot photo incontournable au pied de l'immense muraille de calcaire",
+      },
+      {
+        url: "/images/cathedrale-imsfrane/safari-4x4.jpg",
+        title: "Safari Aventure en 4x4 à Travers les Pistes Sauvages",
+        titleAr: "سفاري ومغامرة 4x4 عبر المسارات والمسالك الجبلية",
+        caption: "Exploration des gorges vertigineuses et traversée des rivières d'eau cristalline",
+      },
+      {
+        url: "/images/cathedrale-imsfrane/quad-adventure.jpg",
+        title: "Sensations Fortes en Quad au Cœur de la Nature",
+        titleAr: "حماس وأدرينالين جولة الكواد بين أحضان الجبال",
+        caption: "Pilotage tout-terrain à travers les forêts de pins et les cascades d'Imsfrane",
+      },
+      {
+        url: "/images/cathedrale-imsfrane/bin-el-ouidane.jpg",
+        title: "Eaux Émeraudes & Balade Bateau à Bin El Ouidane",
+        titleAr: "المياه الفيروزية الساحرة وجولة القارب ببحيرة بين الويدان",
+        caption: "Pause détente sur les eaux calmes du lac avant le retour vers Casablanca et Rabat",
+      },
+    ],
+  },
 };
 
 interface UniversalTripShowcaseProps {
